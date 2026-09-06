@@ -1,0 +1,518 @@
+@import "tailwindcss";
+
+/* ===========================================================================
+   GlobalHealth Design Tokens
+   Single source of truth for color, radius and shadow used across the product.
+   Tailwind v4 @theme exposes these as utilities (e.g. bg-brand, rounded-card).
+   =========================================================================== */
+@theme {
+  /* Brand — verified / success / primary actions */
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-200: #a7f3d0;
+  --color-brand-300: #6ee7b7;
+  --color-brand-400: #34d399;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
+  --color-brand-800: #065f46;
+  --color-brand-900: #064e3b;
+
+  /* Medical — deep medical blue/teal used for primary platform identity.
+     Homepage components are themed through these tokens so the whole platform
+     can be re-themed later without rewriting components. */
+  --color-medical-50: #f0f7fa;
+  --color-medical-100: #daeaf0;
+  --color-medical-200: #b9d7e3;
+  --color-medical-300: #8dbccf;
+  --color-medical-400: #5a9cb6;
+  --color-medical-500: #3d829e;
+  --color-medical-600: #2f6a85;
+  --color-medical-700: #2a576d;
+  --color-medical-800: #284a5c;
+  --color-medical-900: #1e3a49;
+  --color-medical-950: #122530;
+
+  /* Surfaces */
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f8fafc;
+  --color-surface-muted: #f1f5f9;
+  --color-border-subtle: #e2e8f0;
+
+  /* Text */
+  --color-ink: #0f172a;
+  --color-ink-soft: #475569;
+  --color-ink-muted: #94a3b8;
+
+  /* Status */
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #0284c7;
+
+  /* Radius scale */
+  --radius-card: 1rem;
+  --radius-control: 0.75rem;
+
+  /* Shadows */
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 4px 16px -4px rgb(15 23 42 / 0.08);
+  --shadow-pop: 0 8px 30px -6px rgb(15 23 42 / 0.18);
+  --shadow-soft: 0 1px 3px 0 rgb(15 23 42 / 0.05), 0 1px 2px -1px rgb(15 23 42 / 0.05);
+  --shadow-lift: 0 2px 4px -1px rgb(15 23 42 / 0.06), 0 12px 28px -8px rgb(15 23 42 / 0.14);
+
+  /* Display font for headings */
+  --font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+
+  /* Motion */
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  html {
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-white text-slate-900 antialiased;
+  }
+
+  /* Accessible, consistent focus ring for keyboard users everywhere */
+  :focus-visible {
+    outline: 2px solid var(--color-medical-500);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Honor reduced-motion preferences globally */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Compact form input used by the news/authority surfaces */
+  .inp {
+    @apply w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white;
+  }
+
+  /* Standard surface card — one visual grammar across the product */
+  .gh-card {
+    @apply rounded-card border border-slate-200/80 bg-white shadow-card;
+  }
+
+  /* Primary action button */
+  .gh-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-control bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  /* Secondary action button */
+  .gh-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-control border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  /* ---------------- Homepage design system ---------------- */
+
+  /* Page gutter — consistent horizontal rhythm */
+  .gh-container {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Vertical rhythm for full-width sections */
+  .gh-section {
+    @apply py-14 sm:py-16 lg:py-20;
+  }
+
+  /* Eyebrow label above section headings */
+  .gh-eyebrow {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-medical-100 bg-medical-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-medical-700;
+  }
+
+  /* Section heading (h2) */
+  .gh-h2 {
+    @apply text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-[2rem] lg:leading-tight;
+  }
+
+  /* Section lead paragraph */
+  .gh-lead {
+    @apply mt-3 text-sm leading-relaxed text-slate-600 sm:text-base;
+  }
+
+  /* Hoverable chip (category pills / filters) */
+  .gh-chip {
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-600 transition duration-150 hover:border-medical-200 hover:bg-medical-50 hover:text-medical-800;
+  }
+
+  .gh-chip-active {
+    @apply border-medical-600 bg-medical-600 text-white hover:bg-medical-700 hover:text-white;
+  }
+
+  /* Base card used across homepage sections */
+  .gh-card-surface {
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-soft transition duration-200;
+  }
+
+  /* Hide scrollbars on horizontal scrollers (kept for touch swipe) */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ---------------- Keyframes (reduced-motion gated) ---------------- */
+
+@keyframes gh-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes gh-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gh-pulse-ring {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  70% { transform: scale(1.35); opacity: 0; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gh-float { animation: gh-float 5s ease-in-out infinite; }
+  .gh-fade-up { animation: gh-fade-up 0.5s var(--ease-soft) both; }
+  .gh-pulse-ring::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    background: var(--color-medical-400);
+    animation: gh-pulse-ring 2.4s ease-out infinite;
+    z-index: -1;
+  }
+}
+
+/* Scroll-reveal driven by IntersectionObserver (class toggled in JS) */
+.gh-reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.5s var(--ease-soft), transform 0.5s var(--ease-soft);
+}
+.gh-reveal.gh-reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Floating AI launcher anchor — bottom-right, safe-area aware, and resized
+   per breakpoint (14px mobile / 24px tablet+). Sits at z-40: below the auth
+   gate (z-90), language modal (z-50), workspaces (z-70) and More overlay. */
+.gh-float-anchor {
+  right: max(0.875rem, env(safe-area-inset-right));
+  bottom: max(0.875rem, env(safe-area-inset-bottom));
+}
+@media (min-width: 640px) {
+  .gh-float-anchor {
+    right: max(1.5rem, env(safe-area-inset-right));
+    bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* AI Assistant typing indicator — three subtle dots (reduced-motion gated) */
+@keyframes gh-typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .gh-typing-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--color-medical-400);
+    animation: gh-typing-bounce 1.2s ease-in-out infinite;
+  }
+  .gh-typing-dot:nth-child(2) { animation-delay: 0.15s; }
+  .gh-typing-dot:nth-child(3) { animation-delay: 0.3s; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gh-typing-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--color-medical-400);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Authentication doctor avatar
+ * ------------------------------------------------------------------ */
+.gh-av-glow {
+  position: absolute;
+  inset: -16%;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgb(63 130 158 / 0.26), transparent 68%);
+  filter: blur(6px);
+  pointer-events: none;
+}
+.gh-av-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.gh-av-body {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+}
+.gh-av-head {
+  transform-box: fill-box;
+  transform-origin: 50% 62%;
+  transition: transform 0.55s var(--ease-soft);
+}
+.gh-av-pupils {
+  transition: transform 0.5s var(--ease-soft);
+}
+.gh-av-eyes,
+.gh-av-happy-eyes,
+.gh-av-mouth-neutral,
+.gh-av-mouth-happy,
+.gh-av-mouth-concern,
+.gh-av-mouth-gentle {
+  transition: opacity 0.35s var(--ease-soft);
+}
+.gh-av-happy-eyes,
+.gh-av-mouth-happy,
+.gh-av-mouth-concern {
+  opacity: 0;
+}
+.gh-av-privacy-arm {
+  transition: transform 0.6s var(--ease-soft);
+  transform-box: fill-box;
+  transform-origin: top center;
+}
+.gh-av-shield {
+  opacity: 0;
+  transform: scale(0.5);
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity 0.45s var(--ease-soft), transform 0.45s var(--ease-soft);
+}
+
+/* Expression state — facial + posture reactions */
+.gh-av-look .gh-av-pupils { transform: translate(3px, 1.5px); }
+.gh-av-look .gh-av-head { transform: rotate(3deg) translateY(1px); }
+
+.gh-av-privacy .gh-av-pupils { transform: translate(-1px, 3px); }
+.gh-av-privacy .gh-av-head { transform: rotate(-1.5deg) translateY(2px); }
+.gh-av-privacy .gh-av-privacy-arm { transform: translate(-12px, -7px) rotate(-16deg); }
+.gh-av-privacy .gh-av-shield { opacity: 1; transform: scale(1); }
+
+.gh-av-error .gh-av-head { transform: rotate(-2.5deg) translateY(1px); }
+.gh-av-error .gh-av-brows { transform: translateY(1.5px); }
+.gh-av-error .gh-av-mouth-neutral,
+.gh-av-error .gh-av-mouth-happy,
+.gh-av-error .gh-av-mouth-gentle { opacity: 0; }
+.gh-av-error .gh-av-mouth-concern { opacity: 1; }
+
+.gh-av-success .gh-av-head { transform: rotate(2deg) translateY(-1px); }
+.gh-av-success .gh-av-eyes,
+.gh-av-success .gh-av-mouth-neutral { opacity: 0; }
+.gh-av-success .gh-av-mouth-happy,
+.gh-av-success .gh-av-happy-eyes { opacity: 1; }
+
+.gh-av-signup .gh-av-head { transform: rotate(1deg) translateY(-1.5px); }
+.gh-av-signup .gh-av-eyes,
+.gh-av-signup .gh-av-mouth-neutral { opacity: 0; }
+.gh-av-signup .gh-av-mouth-happy,
+.gh-av-signup .gh-av-happy-eyes { opacity: 1; }
+
+.gh-av-recover .gh-av-head { transform: rotate(-1deg); }
+.gh-av-recover .gh-av-mouth-neutral { opacity: 0; }
+.gh-av-recover .gh-av-mouth-gentle { opacity: 1; }
+
+/* Idle breathing + blinking (reduced-motion users get a static pose) */
+@media (prefers-reduced-motion: no-preference) {
+  .gh-av-body {
+    animation: gh-av-breathe 3.8s ease-in-out infinite;
+  }
+  .gh-av-glow {
+    animation: gh-av-breathe 3.8s ease-in-out infinite;
+  }
+  .gh-av-lids {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: gh-av-blink 5.4s infinite;
+  }
+  .gh-av-recover .gh-av-head {
+    animation: gh-av-nod 5s ease-in-out infinite;
+  }
+  .gh-av-success {
+    animation: gh-av-bounce 0.8s var(--ease-soft);
+  }
+}
+
+@keyframes gh-av-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+@keyframes gh-av-blink {
+  0%, 90.5%, 100% { transform: scaleY(0); }
+  93%, 96.5% { transform: scaleY(1); }
+}
+@keyframes gh-av-nod {
+  0%, 86%, 100% { transform: rotate(-1deg); }
+  91%, 95% { transform: rotate(1.6deg); }
+}
+@keyframes gh-av-bounce {
+  0% { transform: translateY(0) scale(1); }
+  30% { transform: translateY(-6px) scale(1.02); }
+  60% { transform: translateY(0) scale(1); }
+}
+
+/* Success check badge */
+.gh-av-check {
+  animation: gh-av-pop 0.55s var(--ease-soft) both;
+}
+@keyframes gh-av-pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.18); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Speech bubble */
+.gh-av-bubble {
+  animation: gh-av-bubble-in 0.45s var(--ease-soft) both;
+}
+@keyframes gh-av-bubble-in {
+  from { opacity: 0; transform: translate(-50%, 6px) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+/* Auth sub-view transition (Log In ↔ Sign Up ↔ Recover) */
+.gh-auth-view {
+  animation: gh-auth-view-in 0.35s var(--ease-soft) both;
+}
+@keyframes gh-auth-view-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+
+/* ===========================================================================
+   PURE SYMMETRY & ORDER — GLOBAL DESIGN LAYER
+   One disciplined visual system applied across the whole product: centered
+   frames, mirrored compositions, uniform geometry and even rhythm.
+   Form and order only — no content or behaviour changes.
+   =========================================================================== */
+@layer components {
+  /* Symmetric 3-zone header: brand · centered nav · actions */
+  .gh-sym-navbar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .gh-sym-navbar > :first-child { justify-self: start; min-width: 0; }
+  .gh-sym-navbar > nav { justify-self: center; min-width: 0; }
+  .gh-sym-navbar > :last-child { justify-self: end; min-width: 0; }
+
+  /* Equal vertical rhythm for every section */
+  .gh-sym-section {
+    @apply py-14 sm:py-16 lg:py-20;
+  }
+
+  /* Centered, ordered section header */
+  .gh-sym-head {
+    @apply mx-auto max-w-3xl text-center;
+  }
+
+  /* Even symmetric grids — equal cells, equal gaps */
+  .gh-sym-grid {
+    @apply grid gap-5;
+  }
+  .gh-sym-grid-2 { @apply grid-cols-1 sm:grid-cols-2; }
+  .gh-sym-grid-3 { @apply grid-cols-1 sm:grid-cols-2 lg:grid-cols-3; }
+  .gh-sym-grid-4 { @apply grid-cols-2 lg:grid-cols-4; }
+  .gh-sym-grid-6 { @apply grid-cols-2 sm:grid-cols-3 lg:grid-cols-6; }
+
+  /* Uniform centered card — one geometry for every surface */
+  .gh-sym-card {
+    @apply flex flex-col items-center justify-center rounded-2xl border border-slate-200/80 bg-white p-6 text-center shadow-soft;
+  }
+
+  /* Symmetric action pair: equal width, centered */
+  .gh-sym-actions {
+    @apply mx-auto flex w-full max-w-md flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center;
+  }
+  .gh-sym-actions > * {
+    @apply w-full justify-center sm:w-auto sm:min-w-[10rem];
+  }
+
+  /* Centered stat block */
+  .gh-sym-stat {
+    @apply flex flex-col items-center justify-center gap-1.5 text-center;
+  }
+
+  /* Ordered centered list */
+  .gh-sym-list {
+    @apply mx-auto flex max-w-2xl flex-col items-center gap-2.5 text-center;
+  }
+
+  /* Symmetric divider */
+  .gh-sym-divider {
+    @apply mx-auto h-px w-24 bg-slate-200;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Print experience (disease pages & general content)
+ * ------------------------------------------------------------------ */
+@media print {
+  header,
+  footer,
+  aside,
+  .gh-float,
+  .gh-pulse-ring,
+  .no-print,
+  button,
+  nav[aria-label*="On this page"] {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+  main,
+  article {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .gh-container {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+  a {
+    color: #0f172a !important;
+    text-decoration: underline;
+  }
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+}
