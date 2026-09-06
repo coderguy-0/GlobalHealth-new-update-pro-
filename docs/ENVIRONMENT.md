@@ -55,3 +55,34 @@ NEWS_ADMIN_BOOTSTRAP_PASSWORD=<strong random value>
 NEWS_ADMIN_BOOTSTRAP_NAME=GlobalHealth News Administrator
 GH_RUNTIME_DIR=data
 ```
+
+## Troubleshooting: "the AI assistant is not working / not trained"
+
+Run the stack diagnosis:
+
+```bash
+npm run ai:doctor          # add --live to make one real model call
+```
+
+It checks the three independent stages and names the broken one:
+
+| Stage | Owned by | Failure symptom |
+| --- | --- | --- |
+| 1. Knowledge — is the site indexed? | this repo (`src/core/ai/knowledge/*`) | assistant answers generically, misses site content |
+| 2. Retrieval — does the right record reach the prompt? | this repo (`ghRetrievalEngine.ts`) | wrong or empty grounding; measure with `npm run ai:eval` |
+| 3. Model provider — can the server generate? | **environment** (`GEMINI_API_KEY`) | every `/api/ai-assistant` call returns **HTTP 503** and the UI shows *"The AI service is not configured on this server yet."* |
+
+Stage 3 is the usual cause. The key is read once at startup, so after adding it
+you must restart the server:
+
+```bash
+echo "GEMINI_API_KEY=your-key-here" >> .env    # .env is git-ignored
+npm run dev
+npm run ai:doctor -- --live                    # confirms the key really works
+```
+
+Optional overrides: `AI_PROVIDER` (default `gemini`) and `AI_MODEL`
+(default `gemini-2.5-flash`). A key that is present but rejected (invalid,
+expired, billing disabled, or no access to the configured model) shows up as a
+`PROVIDER_FAILED` line in `--live` mode, and as
+`AI_PROVIDER_UNAVAILABLE` (HTTP 503) to users.

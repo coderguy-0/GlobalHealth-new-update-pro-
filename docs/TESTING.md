@@ -66,3 +66,6 @@ and never touch production `data/`.
   stemming, typo repair, identity/coverage gates, intent boosts) and
   `src/core/ai/knowledge/ghAccountKnowledge.test.ts` (signed-in layer is closed
   to guests and contains no personal data).
+- `npm run ai:doctor` — end-to-end stack diagnosis (knowledge → retrieval →
+  model provider). Use it first whenever the assistant "stops working": it
+  distinguishes a training/grounding problem from a missing `GEMINI_API_KEY`.
