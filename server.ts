@@ -8137,6 +8137,12 @@ Request ID: ${requestId}`,
       // verified clinical libraries + live directories + public content index
       // (health tools, recipes, nutrition, wellness, map, community, news,
       // help, policies) — one labeled, source-attributed context block.
+      // Identity is resolved from the validated session token ONLY (never from
+      // client-declared fields). It is resolved BEFORE retrieval so the
+      // account-feature knowledge layer can be unlocked for signed-in callers
+      // and stays completely closed for guests.
+      const authUser = authenticate(req);
+
       const publicKnowledge = retrievePublicKnowledge(String(prompt || ''), {
         directoryCatalog: {
           doctors: INITIAL_PORTAL_DOCTORS,
@@ -8144,6 +8150,7 @@ Request ID: ${requestId}`,
           pharmacyProducts: PHARMACY_PRODUCTS,
           departments: INITIAL_DEPARTMENTS,
         },
+        authenticated: Boolean(authUser),
       });
 
       const langInstruction = language && language !== 'English' ? ` Please respond in ${language}.` : '';
@@ -8165,10 +8172,9 @@ Request ID: ${requestId}`,
       // for guests.
       const ctxSnapshot = cleanCtx((userContext as any)?.personalHealthSnapshot, 2500) || '';
 
-      // Identity + private context come from the server session ONLY. A guest
-      // (no valid session) gets an assistant that sees zero private data.
-      const authUser = authenticate(req);
-
+      // Identity + private context come from the server session ONLY (resolved
+      // above). A guest (no valid session) gets an assistant that sees zero
+      // private data.
       let identityInstruction: string;
       if (authUser) {
         const own = seedPrivateData(authUser.id, authUser.fullName);

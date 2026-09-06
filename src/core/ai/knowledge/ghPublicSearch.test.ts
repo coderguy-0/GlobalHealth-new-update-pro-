@@ -69,3 +69,66 @@ test('no directory catalog means no directory hits — graceful degradation', ()
   const result = retrievePublicKnowledge('Dr. Vikram Sethi');
   assert.ok(!result.hits.some((h) => h.kind === 'doctor'));
 });
+
+/* ---------------------------------------------------------------------------
+   Ranked retrieval behaviour (BM25F engine + intent + arbitration)
+   ------------------------------------------------------------------------- */
+
+test('hits are ordered by relevance and carry a score', () => {
+  const result = retrievePublicKnowledge('How does the BMI calculator work?', { directoryCatalog: CATALOG });
+  assert.ok(result.hits.length > 0);
+  assert.match(result.hits[0].name, /BMI Calculator/i);
+  for (let i = 1; i < result.hits.length; i += 1) {
+    assert.ok(result.hits[i - 1].score >= result.hits[i].score, 'hits must be sorted by score');
+  }
+});
+
+test('intent boosting surfaces the content type the user actually asked for', () => {
+  const recipes = retrievePublicKnowledge('give me a diabetic friendly recipe', { directoryCatalog: CATALOG });
+  assert.ok(recipes.hits.some((h) => h.kind === 'RECIPE'));
+
+  const news = retrievePublicKnowledge('latest health news articles', { directoryCatalog: CATALOG });
+  assert.ok(news.hits.some((h) => h.kind === 'NEWS'));
+});
+
+test('typos still reach the right verified record', () => {
+  const result = retrievePublicKnowledge('parcetamol dosage', { directoryCatalog: CATALOG });
+  assert.ok(result.hits.some((h) => /paracetamol/i.test(h.name)));
+});
+
+test('cross-layer arbitration drops a layer that is far weaker than the best match', () => {
+  const result = retrievePublicKnowledge('what does the privacy policy say about my data?', {
+    directoryCatalog: CATALOG,
+  });
+  assert.ok(result.hits.some((h) => h.kind === 'POLICY'));
+  assert.ok(!result.hits.some((h) => h.kind === 'test'), 'unrelated lab tests must not ride along');
+});
+
+test('account features are unlocked ONLY for an authenticated caller', () => {
+  const guest = retrievePublicKnowledge('what is on my health dashboard?', { directoryCatalog: CATALOG });
+  assert.ok(!guest.hits.some((h) => h.kind === 'ACCOUNT_FEATURE'));
+  assert.ok(!guest.context.includes('GLOBALHEALTH ACCOUNT FEATURES'));
+
+  const member = retrievePublicKnowledge('what is on my health dashboard?', {
+    directoryCatalog: CATALOG,
+    authenticated: true,
+  });
+  assert.ok(member.hits.some((h) => h.kind === 'ACCOUNT_FEATURE'));
+  assert.ok(member.context.includes('GLOBALHEALTH ACCOUNT FEATURES'));
+  // Feature knowledge only — it must never claim to contain someone's data.
+  assert.ok(member.context.includes('contains no one'));
+});
+
+test('the composed context stays inside the prompt budget', () => {
+  const result = retrievePublicKnowledge('diabetes symptoms treatment diet recipes tests doctors hospitals news', {
+    directoryCatalog: CATALOG,
+    charBudget: 1200,
+  });
+  assert.ok(result.context.length <= 1400, `context was ${result.context.length} chars`);
+});
+
+test('diagnostics report what each layer contributed', () => {
+  const result = retrievePublicKnowledge('paracetamol side effects', { directoryCatalog: CATALOG });
+  assert.ok(result.diagnostics.topScore > 0);
+  assert.ok(result.diagnostics.clinical >= 1);
+});

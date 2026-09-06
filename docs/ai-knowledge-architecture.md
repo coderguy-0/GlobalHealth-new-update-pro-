@@ -104,17 +104,87 @@ in answers; citations are never fabricated.
   secret-free errors.
 - `src/core/ai/aiUserContext.test.ts` — personal-context bounds/injection.
 
-## 6. Honest scope notes (future work)
+---
+
+## 7. Grounding upgrade — shared retrieval engine (this iteration)
+
+The assistant is **grounded, not fine-tuned**: answer quality is decided by
+whether the right GlobalHealth record reaches the prompt. This iteration
+replaced the per-module first-match scans with one shared ranking core.
+
+```
+src/core/ai/knowledge/
+├── ghRetrievalEngine.ts        # BM25F ranking core (NEW) + tests
+├── ghAccountKnowledge.ts       # signed-in FEATURE knowledge (NEW) + tests
+├── ghPublicIndex.ts            # now ranked by the engine
+├── ghDirectory.ts              # precision matches first, ranked fallback
+├── ghAliases.ts                # ~180 layman ⇄ clinical ⇄ site synonyms
+└── ghPublicSearch.ts           # intent boosting + arbitration + budget
+src/core/ai/aiKnowledge.ts      # clinical libraries ranked by the engine
+scripts/ai-retrieval-eval.mjs   # golden-set quality gate (npm run ai:eval)
+```
+
+### What the engine does
+
+| Capability | Why it matters |
+|---|---|
+| **BM25F field weighting** (title 4 · keywords 2.5 · summary 1.2 · details 0.7) | A focused record beats a long page that mentions the word once. |
+| **Morphological normalisation** (plurals, `-ing`/`-ed`, `-ies`) | "calculators", "calculator", "calculating" hit the same record. |
+| **Alias-weighted expansion** | "heart attack" retrieves *Myocardial infarction* — expansions score below the user's own words, so they never outrank an exact match. |
+| **Typo repair (edit distance 1)** | "parcetamol dosage" → the real Paracetamol record. `protectedTerms` stops product words being repaired into clinical ones ("consent" never becomes "content"). |
+| **Identity gate** | A record only qualifies if a query term appears in its title/keywords — body-text overlap alone is never enough. |
+| **Weak-identity terms** | "blood", "test", "high", "hospital", "dr" cannot identify a record on their own, so "my sugar is high" no longer returns every record named "High-…". |
+| **Term-coverage gate** | Records matching one incidental word are dropped when better records matched more of the question. |
+| **Intent boosting** | "a recipe for diabetes" boosts RECIPE, "which calculator…" boosts HEALTH_TOOL, "near me" boosts MAP_LOCATION, etc. |
+| **Cross-layer arbitration** | When one library is overwhelmingly the best answer, the weak library is dropped instead of padding the prompt. |
+| **Prompt budget** | The composed block is capped (default 7000 chars) so safety/policy instructions can never be crowded out. |
+| **Honest emptiness** | Nothing relevant ⇒ nothing returned; the assistant must say it does not have that. |
+
+### Signed-in scope (account layer)
+
+`ghAccountKnowledge.ts` teaches the assistant the AUTHENTICATED half of the
+product (dashboard, appointments, privacy & consent centre, my history, saved
+AI conversations, account security, health records). Two invariants, both
+test-enforced:
+
+1. It contains **feature descriptions only — zero user data**. A specific
+   user's values still come per-request from the validated session via
+   `aiUserContext.buildAuthorizedRecordSummary`.
+2. It is retrieved **only** when `server.ts` passes `authenticated: true`,
+   which is derived from `authenticate(req)` — never from a client field. A
+   guest asking "what's on my dashboard?" still gets the sign-in answer.
+
+### Measuring it (`npm run ai:eval`)
+
+A 43-question golden set (clinical, tools, recipes, nutrition, wellness,
+directories, map, help, policy, news, community, signed-in features, plus
+negative "must stay silent / must not leak" checks) runs through the exact
+server retrieval path:
+
+| Metric | Before | After |
+|---|---|---|
+| hit@1 | 52.5% | **80.0%** |
+| hit@3 | 67.5% | **100%** |
+| recall | 70.0% | **100%** |
+| privacy/noise violations | 0 | **0** |
+
+The script exits non-zero below its thresholds, so it works as a CI gate.
+`npm run ai:report` remains the coverage ledger (what is indexed and what is
+deliberately excluded, with reasons).
+
+---
+
+## 8. Honest scope notes (future work)
 
 Deliberately **not** built in this iteration, to avoid overreach:
 
 - **Tool-calling loop** (model invokes `SEARCH_DOCTORS` mid-conversation):
   retrieval is currently pre-generation and deterministic — safer and cheaper;
   a tool loop can be added inside `aiProvider`/`server.ts` later.
-- **Vector/semantic search**: current retrieval is alias+token based over
-  in-repo datasets (no embeddings infrastructure). The chunking guidance is
-  already satisfied by the dataset structure (each record is small and
-  sectioned).
+- **Vector/semantic search**: retrieval is lexical (BM25F + aliases + typo
+  repair) over in-repo datasets — deterministic, testable and dependency-free.
+  Embeddings would add paraphrase recall ("something for my tummy ache") and
+  can be layered on top of `ghRetrievalEngine` later without changing callers.
 - **Admin CMS for AI knowledge records**: the data layer (status/version)
   is ready; the editorial UI should follow the existing News CMS workflow
   (DRAFT → REVIEW → APPROVAL → PUBLISH).
