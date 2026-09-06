@@ -128,7 +128,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const moreMenu: MenuItem[] = [
     { id: 'nav-news', tab: 'news', label: 'Health News', icon: <Newspaper className="h-4 w-4" /> },
     { id: 'nav-hospitals', tab: 'hospitals', label: 'Hospitals', icon: <Building2 className="h-4 w-4" /> },
-    { id: 'nav-blood-banks', tab: 'medical-map', label: 'MAP', icon: <Droplets className="h-4 w-4" /> },
+    { id: 'nav-medical-map', tab: 'medical-map', label: 'Medical Map', icon: <MapPin className="h-4 w-4" /> },
     { id: 'nav-community', tab: 'community', label: 'Community', icon: <Users className="h-4 w-4" /> },
   ];
 

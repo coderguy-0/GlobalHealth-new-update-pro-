@@ -20,6 +20,8 @@ import { useAuth, toUserAccount } from './context/AuthContext';
 import { AuthSubView } from './types/auth';
 import { TERMS_VERSION } from './lib/policyVersions';
 import { newsAuthService } from './services/newsAuthService';
+import { CommandPalette } from './components/CommandPalette';
+import { EmergencyModal } from './components/EmergencyModal';
 
 // Heavy workspaces (portals, CMS, health-records suite) are code-split so the
 // public homepage never downloads them until a visitor actually opens one.
@@ -226,7 +228,7 @@ const OVERLAY_META: Partial<Record<NavigationTab, { title: string; subtitle: str
     theme: 'light',
   },
   'pharmacy-portal': {
-    title: 'Pharmacy Porter',
+    title: 'Pharmacy Portal',
     subtitle: 'Authorized Pharmacy Portal Website & Verified Pharmacy Partners',
     badge: 'Enterprise v4.2',
     theme: 'dark',
@@ -403,6 +405,14 @@ export default function App() {
   }, [parseHash]);
 
   const [dashboardViewMode, setDashboardViewMode] = useState<DashboardViewMode>('dashboard');
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [emergencyModalOpen, setEmergencyModalOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpenCmd = () => setCommandPaletteOpen(true);
+    window.addEventListener('gh:open-command-palette', handleOpenCmd);
+    return () => window.removeEventListener('gh:open-command-palette', handleOpenCmd);
+  }, []);
 
   // Re-lock the News Management workspace whenever the visitor leaves it, so
   // opening the portal again always starts at the editorial sign-in.
@@ -1116,6 +1126,26 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Global Universal Command Palette (Cmd+K / Ctrl+K) */}
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onNavigate={(tab, mode) => {
+          setCommandPaletteOpen(false);
+          handleNavTabChange(tab, mode);
+        }}
+        onOpenEmergency={() => {
+          setCommandPaletteOpen(false);
+          setEmergencyModalOpen(true);
+        }}
+      />
+
+      {/* Global Emergency Modal */}
+      <EmergencyModal
+        open={emergencyModalOpen}
+        onClose={() => setEmergencyModalOpen(false)}
+      />
 
     </div>
   );

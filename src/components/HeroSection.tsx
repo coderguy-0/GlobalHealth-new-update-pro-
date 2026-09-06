@@ -9,6 +9,14 @@ import {
   CornerDownLeft,
   X,
   Bot,
+  Command,
+  Activity,
+  Pill,
+  FlaskConical,
+  Building2,
+  ShieldCheck,
+  Stethoscope,
+  HeartPulse,
 } from 'lucide-react';
 import { NavigationTab } from '../types';
 import { RECIPES, DOCTORS, HOSPITALS } from '../data/directorySeed';
@@ -31,12 +39,8 @@ interface SearchHit {
 
 const RECENT_KEY = 'gh_home_recent_searches_v1';
 
-const SUGGESTIONS = ['Diabetes', 'Blood Pressure', 'Complete Blood Count', 'Paracetamol', 'Cardiologist', 'Hospitals near me'];
+const SUGGESTIONS = ['Diabetes Mellitus', 'Essential Hypertension', 'Complete Blood Count', 'Paracetamol', 'Cardiologist', 'Hospitals Near Me'];
 
-/**
- * Homepage hero: two-column layout with eyebrow, headline, supporting copy,
- * primary/secondary CTAs and a unified global healthcare search experience.
- */
 export const HeroSection: React.FC<HeroSectionProps> = ({ onTabChange }) => {
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
@@ -46,7 +50,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onTabChange }) => {
   const [showSkeleton, setShowSkeleton] = useState(true);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setShowSkeleton(false), 350);
+    const timer = window.setTimeout(() => setShowSkeleton(false), 250);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -85,8 +89,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onTabChange }) => {
     }
   };
 
-  // The three large catalogs are fetched only once the visitor actually starts
-  // searching, so the landing page itself never downloads them.
   const searchActive = query.trim().length > 0;
   const { items: HEALTH_CONDITIONS } = useCatalog(loadDiseases, searchActive);
   const { items: MEDICINES } = useCatalog(loadMedicines, searchActive);
@@ -175,75 +177,105 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onTabChange }) => {
     }
   };
 
+  const triggerCommandPalette = () => {
+    window.dispatchEvent(new CustomEvent('gh:open-command-palette'));
+  };
+
   const panelOpen = focused && (query.trim() || recent.length > 0);
 
   return (
-    <section className="relative overflow-hidden bg-white">
-      {/* Soft top light wash — calm, not saturated */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[560px] bg-gradient-to-b from-medical-50/80 via-medical-50/30 to-transparent" aria-hidden="true" />
+    <section className="relative overflow-hidden bg-gradient-to-b from-slate-50/90 via-white to-slate-50/40 pb-16 pt-8 sm:pt-14">
+      {/* Ambient background glow */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[640px] bg-gradient-to-b from-cyan-50/50 via-teal-50/30 to-transparent" aria-hidden="true" />
+      <div className="pointer-events-none absolute -left-48 top-10 h-96 w-96 rounded-full bg-cyan-200/20 blur-3xl" aria-hidden="true" />
+      <div className="pointer-events-none absolute -right-48 top-20 h-96 w-96 rounded-full bg-emerald-200/20 blur-3xl" aria-hidden="true" />
 
       <div className="gh-container relative">
-        <div className="gh-sym-section flex flex-col items-center text-center">
-          {/* ---------------- Centered eyebrow ---------------- */}
-          <span className="gh-eyebrow">
-            <Sparkles className="h-3.5 w-3.5" />
-            YOUR HEALTH. CONNECTED.
-          </span>
-
-          {/* ---------------- Centered headline ---------------- */}
-          <h1 className="mt-6 max-w-3xl text-[1.85rem] font-bold leading-[1.15] tracking-tight text-slate-900 sm:text-4xl lg:text-[2.75rem]">
-            Healthcare information, discovery and guidance — all in one place.
-          </h1>
-
-          {/* ---------------- Centered supporting copy ---------------- */}
-          <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-600">
-            GlobalHealth brings trusted health information, medicines, healthcare professionals,
-            medical facilities, laboratory resources, and intelligent assistance together in one
-            simple platform.
-          </p>
-
-          {/* ---------------- Symmetric CTA pair ---------------- */}
-          <div className="gh-sym-actions mt-8">
-            <Button size="lg" onClick={() => onTabChange('explore')}>
-              Explore Healthcare
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-            <Button variant="secondary" size="lg" onClick={() => onTabChange('ai-assistant')}>
-              <Bot className="h-4 w-4 text-medical-600" />
-              Ask AI Assistant
-            </Button>
+        <div className="flex flex-col items-center text-center">
+          {/* Symmetrical Eyebrow Badge */}
+          <div className="inline-flex items-center gap-2 rounded-full border border-teal-200/80 bg-white/90 px-4 py-1.5 shadow-sm backdrop-blur-md">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[11px] font-extrabold uppercase tracking-widest text-slate-800">
+              NEXT-GEN HEALTHCARE INTELLIGENCE · UNIVERSAL NETWORK
+            </span>
           </div>
 
-          {/* ---------------- Global search (centered, symmetric) ---------------- */}
+          {/* Symmetrical Main Headline */}
+          <h1 className="mt-6 max-w-4xl text-[2rem] font-extrabold leading-[1.12] tracking-tight text-slate-950 sm:text-5xl lg:text-[3.25rem]">
+            Universal Healthcare Discovery, Clinical Intelligence &amp; Connected Care.
+          </h1>
+
+          {/* Symmetrical Subtitle */}
+          <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">
+            Empowering individuals and clinicians with verified medical knowledge, diagnostic
+            tools, state-board certified providers, live facility telemetry, and private health records.
+          </p>
+
+          {/* Bilateral Symmetrical CTA Group */}
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3.5">
+            <Button
+              size="lg"
+              variant="primary"
+              className="shadow-md hover:shadow-lg transition-all"
+              onClick={() => onTabChange('explore')}
+            >
+              <Sparkles className="h-4.5 w-4.5" />
+              Explore Clinical Matrix
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="lg"
+              className="border-slate-300/90 shadow-sm hover:border-slate-400"
+              onClick={() => onTabChange('ai-assistant')}
+            >
+              <Bot className="h-4.5 w-4.5 text-medical-600" />
+              Ask Clinical AI
+            </Button>
+
+            <button
+              type="button"
+              onClick={triggerCommandPalette}
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/80 px-3.5 py-3 text-xs font-semibold text-slate-600 shadow-soft transition hover:bg-slate-100 hover:text-slate-900"
+              title="Open Universal Command Palette"
+            >
+              <Command className="h-3.5 w-3.5 text-slate-500" />
+              <kbd className="font-mono text-[11px] font-bold">⌘K</kbd> Quick Search
+            </button>
+          </div>
+
+          {/* Universal Symmetrical Search Box */}
           <div className="relative mx-auto mt-10 w-full max-w-2xl" id="gh-home-search">
             {showSkeleton ? (
               <SearchSkeleton />
             ) : (
               <div
-                className={`relative flex items-center gap-2 rounded-2xl border bg-white p-2 shadow-soft transition-all duration-200 ${
+                className={`relative flex items-center gap-2 rounded-2xl border bg-white p-2.5 shadow-card transition-all duration-200 ${
                   focused
-                    ? 'scale-[1.01] border-medical-300 shadow-lift'
-                    : 'border-slate-200 hover:border-slate-300'
+                    ? 'scale-[1.01] border-medical-500 shadow-pop ring-2 ring-medical-500/20'
+                    : 'border-slate-200/90 hover:border-slate-300'
                 }`}
               >
-                <Search className={`h-5 w-5 shrink-0 text-slate-400 ${focused ? 'text-medical-600' : ''}`} aria-hidden="true" />
+                <Search className="ml-2 h-5 w-5 shrink-0 text-slate-400" />
+
                 <input
                   ref={inputRef}
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onFocus={() => setFocused(true)}
-                  onBlur={() => window.setTimeout(() => setFocused(false), 180)}
+                  onBlur={() => {
+                    setTimeout(() => setFocused(false), 200);
+                  }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && grouped.length > 0) {
-                      openResult(grouped[0].items[0]);
-                    }
                     if (e.key === 'Escape') setFocused(false);
                   }}
-                  placeholder="Search diseases, medicines, symptoms, lab tests, doctors, hospitals and more…"
-                  aria-label="Search diseases, medicines, symptoms, lab tests, doctors, hospitals and more"
-                  className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                  placeholder="Search diseases, medicines, symptoms, lab tests, doctors, hospitals…"
+                  aria-label="Search diseases, medicines, symptoms, lab tests, doctors, hospitals"
+                  className="w-full bg-transparent px-2 py-1.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 font-medium"
                 />
+
                 {supportSpeech && (
                   <button
                     type="button"
@@ -254,6 +286,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onTabChange }) => {
                     <Mic className="h-4.5 w-4.5" />
                   </button>
                 )}
+
                 {query ? (
                   <button
                     type="button"
@@ -264,45 +297,45 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onTabChange }) => {
                     <X className="h-4 w-4" />
                   </button>
                 ) : (
-                  <kbd className="hidden shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-400 sm:inline-flex">
-                    <CornerDownLeft className="h-3 w-3" /> to search
-                  </kbd>
+                  <div className="hidden shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-400 sm:inline-flex">
+                    <CornerDownLeft className="h-3 w-3" /> search
+                  </div>
                 )}
               </div>
             )}
 
-            {/* Popular categories — centered below the search field */}
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                Popular:
+            {/* Popular Topics Pills */}
+            <div className="mt-3.5 flex flex-wrap items-center justify-center gap-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1">
+                Trending:
               </span>
-              {SUGGESTIONS.slice(0, 4).map((s) => (
+              {SUGGESTIONS.map((s) => (
                 <button
                   key={s}
                   type="button"
                   onClick={() => openSuggestion(s)}
-                  className="gh-chip"
+                  className="gh-chip text-[11px] py-1 px-3"
                 >
                   {s}
                 </button>
               ))}
             </div>
 
-            {/* ---------------- Search panel ---------------- */}
+            {/* Live Search Panel Dropdown */}
             {panelOpen && (
-              <div className="absolute inset-x-0 top-full z-40 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lift">
+              <div className="absolute inset-x-0 top-full z-40 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lift text-left">
                 {query.trim() ? (
                   grouped.length === 0 ? (
                     <div className="px-5 py-8 text-center">
-                      <p className="text-sm font-semibold text-slate-700">No results for “{query.trim()}”</p>
+                      <p className="text-sm font-semibold text-slate-700">No matching items for “{query.trim()}”</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        Try searching another healthcare topic — a disease, medicine, test or doctor.
+                        Try a clinical condition, generic medicine, lab test, or specialist.
                       </p>
                     </div>
                   ) : (
                     <div className="max-h-[26rem] overflow-y-auto p-2">
                       {grouped.map((g) => (
-                        <div key={g.type} className="mb-1">
+                        <div key={g.type} className="mb-2">
                           <p className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                             {g.type}s · {g.items.length}
                           </p>
@@ -349,15 +382,15 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onTabChange }) => {
                       </div>
                     )}
                     <p className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Trending topics
+                      Popular topics
                     </p>
-                    <div className="flex flex-wrap justify-center gap-1.5 px-3 pb-2 pt-1">
+                    <div className="flex flex-wrap justify-start gap-1.5 px-3 pb-2 pt-1">
                       {SUGGESTIONS.map((s) => (
                         <button
                           key={s}
                           type="button"
                           onClick={() => openSuggestion(s)}
-                          className="gh-chip"
+                          className="gh-chip text-[11px]"
                         >
                           <TrendingUp className="h-3 w-3 text-medical-500" />
                           {s}
@@ -370,32 +403,71 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onTabChange }) => {
             )}
           </div>
 
-          {/* ---------------- Symmetric trust stats (4 equal cards) ---------------- */}
-          <div className="mt-16 w-full">
-            <div className="gh-sym-grid gh-sym-grid-4">
+          {/* 4 Symmetrical Live Telemetry Stats HUD */}
+          <div className="mt-14 w-full">
+            <div className="grid grid-cols-2 gap-3.5 sm:gap-5 lg:grid-cols-4">
               {[
-                ['500+ health conditions', 'Clear, sourced disease guides'],
-                ['400+ medicines', 'Safety, forms and precautions'],
-                ['1,000 lab tests', 'Preparation and interpretation context'],
-                ['Verified facility map', 'Hospitals, clinics and urgent care'],
-              ].map(([stat, label]) => (
-                <div key={stat} className="gh-sym-card">
-                  <span className="grid h-11 w-11 place-items-center rounded-2xl bg-medical-50 text-medical-600">
-                    <Sparkles className="h-5 w-5" />
+                {
+                  id: 'stat-diseases',
+                  title: '500+ Conditions',
+                  subtitle: 'ICD-10 clinical disease guides',
+                  icon: <Activity className="h-5 w-5 text-rose-600" />,
+                  bg: 'bg-rose-50 border-rose-100/80',
+                  tab: 'diseases' as NavigationTab,
+                },
+                {
+                  id: 'stat-medicines',
+                  title: '400+ Medicines',
+                  subtitle: 'Dosing, safety & interactions',
+                  icon: <Pill className="h-5 w-5 text-emerald-600" />,
+                  bg: 'bg-emerald-50 border-emerald-100/80',
+                  tab: 'medicines' as NavigationTab,
+                },
+                {
+                  id: 'stat-tests',
+                  title: '1,000+ Lab Tests',
+                  subtitle: 'Clinical reference & prep guidelines',
+                  icon: <FlaskConical className="h-5 w-5 text-sky-600" />,
+                  bg: 'bg-sky-50 border-sky-100/80',
+                  tab: 'medical-tests' as NavigationTab,
+                },
+                {
+                  id: 'stat-facilities',
+                  title: 'Verified Facilities',
+                  subtitle: 'Hospitals, ICU beds & blood bank map',
+                  icon: <Building2 className="h-5 w-5 text-indigo-600" />,
+                  bg: 'bg-indigo-50 border-indigo-100/80',
+                  tab: 'medical-map' as NavigationTab,
+                },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onTabChange(item.tab)}
+                  className="group flex flex-col items-center justify-center rounded-3xl border border-slate-200/90 bg-white/95 p-5 sm:p-6 text-center shadow-soft backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:border-medical-300 hover:shadow-card"
+                >
+                  <span className={`grid h-12 w-12 place-items-center rounded-2xl border transition group-hover:scale-105 ${item.bg}`}>
+                    {item.icon}
                   </span>
-                  <p className="mt-3 text-sm font-bold text-slate-900">{stat}</p>
-                  <p className="mt-1 text-xs text-slate-500">{label}</p>
-                </div>
+                  <p className="mt-3.5 text-sm sm:text-base font-extrabold text-slate-900 group-hover:text-medical-800">
+                    {item.title}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500 leading-snug">{item.subtitle}</p>
+                </button>
               ))}
             </div>
 
-            {/* Educational disclaimer — centered footnote */}
-            <div className="mx-auto mt-10 max-w-2xl rounded-2xl bg-medical-50/70 p-4 text-center">
-              <p className="text-xs leading-relaxed text-medical-800">
-                <span className="font-bold">Educational platform.</span> GlobalHealth helps you
-                understand health information — it does not replace professional medical advice,
-                diagnosis or emergency care.
-              </p>
+            {/* Symmetrical Footnote & Certification Badge */}
+            <div className="mx-auto mt-8 flex flex-wrap items-center justify-center gap-4 text-center">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                MedAuth Cryptographic Verification
+              </span>
+              <span className="text-xs text-slate-400">·</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                <HeartPulse className="h-3.5 w-3.5 text-medical-600" />
+                HL7 / FHIR R4 Ready
+              </span>
             </div>
           </div>
         </div>
