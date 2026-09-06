@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import { NavigationTab } from '../../types';
 import { HOME_ACTIONS } from './homeData';
 import { SectionHeading } from '../ui/SectionHeading';
@@ -9,36 +9,47 @@ interface PrimaryActionsProps {
   onTabChange: (tab: NavigationTab) => void;
 }
 
-/** Section 4 — "What can we help you with?" compact action grid. */
 export const PrimaryActions: React.FC<PrimaryActionsProps> = ({ onTabChange }) => {
   return (
-    <section className="gh-section pt-4 lg:pt-8" aria-labelledby="home-actions-title">
+    <section className="gh-section bg-white pt-2 pb-8 sm:pt-4 sm:pb-12" aria-labelledby="home-actions-title">
       <div className="gh-container">
         <SectionHeading
           id="home-actions-title"
-          eyebrow="Quick access"
-          title="What can we help you with?"
+          eyebrow="Rapid Access Matrix"
+          title="What can we help you discover today?"
+          description="Direct access to verified clinical directories, instant AI triage, medical facilities, and health tools."
           align="center"
         />
 
-        <div className="mt-10 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Symmetrical 8-Card Grid (4 cols on large, 2 cols on tablet, 1 on mobile) */}
+        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {HOME_ACTIONS.map((item, i) => (
-            <Reveal key={item.id} delay={i * 40}>
+            <Reveal key={item.id} delay={i * 30}>
               <button
                 type="button"
                 onClick={() => onTabChange(item.tab)}
-                className="group flex h-full w-full items-start gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-4 text-left shadow-soft transition duration-200 hover:-translate-y-0.5 hover:border-medical-200 hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-medical-500"
+                className="group flex h-full w-full flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-5 text-left shadow-soft transition-all duration-200 hover:-translate-y-1 hover:border-medical-300 hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-medical-500"
               >
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-medical-50 text-medical-700 transition duration-200 group-hover:bg-medical-600 group-hover:text-white">
-                  {item.icon}
-                </span>
-                <span className="min-w-0">
-                  <span className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-bold text-slate-900">{item.title}</span>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-medical-600" />
-                  </span>
-                  <span className="mt-1 block text-xs leading-relaxed text-slate-500">{item.description}</span>
-                </span>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-medical-50 text-medical-700 transition duration-200 group-hover:bg-medical-600 group-hover:text-white shadow-2xs">
+                      {item.icon}
+                    </span>
+                    <ArrowRight className="h-4.5 w-4.5 shrink-0 text-slate-300 transition duration-200 group-hover:translate-x-1 group-hover:text-medical-600" />
+                  </div>
+
+                  <h3 className="mt-4 text-[15px] font-extrabold text-slate-900 group-hover:text-medical-800">
+                    {item.title}
+                  </h3>
+                  <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+                    {item.description}
+                  </p>
+                </div>
+
+                <div className="mt-5 flex items-center gap-1 text-[11px] font-bold text-medical-700 opacity-80 group-hover:opacity-100">
+                  <span>Explore Now</span>
+                  <span aria-hidden="true">→</span>
+                </div>
               </button>
             </Reveal>
           ))}
