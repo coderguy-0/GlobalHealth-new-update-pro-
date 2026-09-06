@@ -1,17 +1,21 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, ScanLine, CheckCircle2, X } from 'lucide-react';
 import { useClinicalWorkspace, IMAGING_STATUS_LABEL } from './doctorClinicalData';
 
 const MODALITIES = ['X-ray', 'CT', 'MRI', 'Ultrasound', 'Mammography', 'ECG', 'Other'] as const;
 
 export const DoctorImaging: React.FC = () => {
-  const { patients, selectedPatientId, addImaging, reviewImaging } = useClinicalWorkspace();
+  const { patients, selectedPatientId, addImaging, reviewImaging, selectPatient } = useClinicalWorkspace();
   const [patientId, setPatientId] = useState(selectedPatientId || patients[0]?.id || '');
   const [modality, setModality] = useState<string>('X-ray');
   const [title, setTitle] = useState('');
   const [facility, setFacility] = useState('GlobalHealth Medical Center');
   const [open, setOpen] = useState(false);
   const [viewer, setViewer] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedPatientId) setPatientId(selectedPatientId);
+  }, [selectedPatientId]);
 
   const all = useMemo(() => patients.flatMap((p) => p.imaging.map((i) => ({ ...i, patientName: p.name, patientIdentifier: p.identifier, bloodGroup: p.bloodGroup }))), [patients]);
   const selected = all.find((i) => i.id === viewer);
@@ -36,7 +40,7 @@ export const DoctorImaging: React.FC = () => {
         <section className="rounded-2xl border border-[#E3E8EF] bg-white p-5 shadow-soft">
           <div className="flex items-center justify-between"><h3 className="text-sm font-extrabold text-[#162235]">Order imaging study</h3><button type="button" onClick={() => setOpen(false)} className="cursor-pointer rounded-lg p-1 text-slate-400 hover:bg-slate-100">✕</button></div>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="block"><span className="text-[10px] font-bold uppercase tracking-wider text-[#8A97A8]">Patient</span><select value={patientId} onChange={(e) => setPatientId(e.target.value)} className="mt-1 w-full rounded-xl border border-[#E3E8EF] px-3 py-2 text-xs focus:border-[#1769E0] focus:outline-none">{patients.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.identifier}</option>)}</select></label>
+            <label className="block"><span className="text-[10px] font-bold uppercase tracking-wider text-[#8A97A8]">Patient</span><select value={patientId} onChange={(e) => { setPatientId(e.target.value); selectPatient(e.target.value); }} className="mt-1 w-full rounded-xl border border-[#E3E8EF] px-3 py-2 text-xs focus:border-[#1769E0] focus:outline-none">{patients.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.identifier}</option>)}</select></label>
             <label className="block"><span className="text-[10px] font-bold uppercase tracking-wider text-[#8A97A8]">Modality</span><select value={modality} onChange={(e) => setModality(e.target.value)} className="mt-1 w-full rounded-xl border border-[#E3E8EF] px-3 py-2 text-xs focus:border-[#1769E0] focus:outline-none">{MODALITIES.map((m) => <option key={m}>{m}</option>)}</select></label>
             <label className="block"><span className="text-[10px] font-bold uppercase tracking-wider text-[#8A97A8]">Study title</span><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Chest X-ray PA" className="mt-1 w-full rounded-xl border border-[#E3E8EF] px-3 py-2 text-xs focus:border-[#1769E0] focus:outline-none" /></label>
             <label className="block"><span className="text-[10px] font-bold uppercase tracking-wider text-[#8A97A8]">Facility</span><input value={facility} onChange={(e) => setFacility(e.target.value)} className="mt-1 w-full rounded-xl border border-[#E3E8EF] px-3 py-2 text-xs focus:border-[#1769E0] focus:outline-none" /></label>

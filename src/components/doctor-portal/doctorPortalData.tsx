@@ -20,8 +20,25 @@ export type VerificationStatus =
   | 'suspended'
   | 'expired';
 
-export type AppointmentStatus = 'confirmed' | 'pending' | 'completed' | 'cancelled' | 'no_show';
-export type ConsultationType = 'in_person' | 'video' | 'teleconsultation' | 'follow_up';
+export type AppointmentStatus =
+  | 'requested'
+  | 'pending'
+  | 'confirmed'
+  | 'checked_in'
+  | 'waiting'
+  | 'in_consultation'
+  | 'completed'
+  | 'cancelled'
+  | 'rescheduled'
+  | 'no_show'
+  | 'rejected'
+  | 'expired';
+export type ConsultationType = 'in_person' | 'video' | 'teleconsultation' | 'follow_up' | 'walk_in' | 'procedure';
+export type AppointmentPriority = 'routine' | 'urgent' | 'stat';
+export type PaymentStatus = 'pending' | 'authorized' | 'paid' | 'failed' | 'refunded' | 'cancelled' | 'disputed';
+export type NotificationCategory = 'clinical' | 'appointments' | 'communication' | 'administrative' | 'financial' | 'security';
+export type NotificationPriority = 'critical' | 'high' | 'normal' | 'low';
+export type TelemedicineSessionStatus = 'upcoming' | 'waiting' | 'live' | 'completed' | 'missed';
 export type AffiliationStatus = 'requested' | 'pending' | 'active' | 'suspended' | 'ended' | 'rejected';
 export type CredentialStatus = 'verified' | 'pending_verification' | 'expiring_soon' | 'expired' | 'suspended';
 export type PublicStatus = 'draft' | 'pending_review' | 'published' | 'changes_requested';
@@ -119,13 +136,27 @@ export interface Appointment {
   facilityName: string;
   department: string;
   patientIdentifier: string;
+  patientId?: string;
+  patientName?: string;
+  patientAge?: number;
+  patientSex?: 'Male' | 'Female' | 'Other';
   date: string;
   startTime: string;
   endTime: string;
   type: ConsultationType;
   status: AppointmentStatus;
-  bookingSource: 'public' | 'portal' | 'facility';
+  bookingSource: 'public' | 'portal' | 'facility' | 'walk_in';
   notes?: string;
+  reason?: string;
+  paymentStatus?: PaymentStatus;
+  consentStatus?: 'granted' | 'pending' | 'expired' | 'revoked' | 'denied' | 'not_required';
+  telemedicine?: boolean;
+  priority?: AppointmentPriority;
+  assignedDoctor?: string;
+  checkInStatus?: 'not_arrived' | 'checked_in' | 'called';
+  token?: number;
+  room?: string;
+  encounterId?: string;
 }
 
 export interface SecureMessageItem {
@@ -134,13 +165,23 @@ export interface SecureMessageItem {
   time: string;
 }
 
+export type ConversationType = 'patient' | 'hospital' | 'staff' | 'doctor' | 'laboratory' | 'pharmacy' | 'care_team';
+
 export interface SecureMessage {
   id: string;
   senderName: string;
   subject: string;
   scope: 'clinical' | 'community';
+  conversationType?: ConversationType;
+  patientId?: string;
+  patientIdentifier?: string;
   date: string;
   read: boolean;
+  pinned?: boolean;
+  muted?: boolean;
+  archived?: boolean;
+  priority?: 'normal' | 'high';
+  online?: boolean;
   messages: SecureMessageItem[];
 }
 
@@ -149,18 +190,53 @@ export interface NotificationItem {
   title: string;
   message: string;
   date: string;
+  time?: string;
   read: boolean;
+  category?: NotificationCategory;
+  priority?: NotificationPriority;
+  source?: string;
+  patientIdentifier?: string;
+  patientId?: string;
+  actionLabel?: string;
+  actionView?: WorkspaceView;
 }
+
+export interface TelemedicineSession {
+  id: string;
+  appointmentId: string;
+  patientId: string;
+  patientIdentifier: string;
+  patientName: string;
+  status: TelemedicineSessionStatus;
+  scheduledAt: string;
+  startTime: string;
+  durationMin?: number;
+  consentStatus: 'granted' | 'pending' | 'denied';
+  connectionStatus: 'idle' | 'connecting' | 'connected' | 'poor' | 'ended';
+  waitingSince?: string;
+}
+
+export type ReferralLoopStatus = 'draft' | 'sent' | 'accepted' | 'scheduled' | 'in_progress' | 'completed' | 'declined' | 'cancelled';
 
 export interface Referral {
   id: string;
   doctorId: string;
   facilityId: string;
   patientIdentifier: string;
+  patientId?: string;
+  patientName?: string;
   specialty: string;
   reason: string;
-  status: 'draft' | 'sent' | 'accepted' | 'declined' | 'completed';
+  status: ReferralLoopStatus;
   date: string;
+  receivingProvider?: string;
+  receivingFacility?: string;
+  urgency?: 'routine' | 'urgent' | 'stat';
+  requestedService?: string;
+  clinicalSummary?: string;
+  appointmentDate?: string;
+  specialistResponse?: string;
+  attachments?: string[];
 }
 
 export interface PortalDocument {
@@ -237,14 +313,39 @@ export const CONSULTATION_LABEL: Record<ConsultationType, string> = {
   video: 'Video',
   teleconsultation: 'Teleconsultation',
   follow_up: 'Follow-up',
+  walk_in: 'Walk-in',
+  procedure: 'Procedure',
 };
 
 export const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  confirmed: 'Confirmed',
+  requested: 'Requested',
   pending: 'Pending Confirmation',
+  confirmed: 'Confirmed',
+  checked_in: 'Checked In',
+  waiting: 'Waiting',
+  in_consultation: 'In Consultation',
   completed: 'Completed',
   cancelled: 'Cancelled',
-  no_show: 'No-show',
+  rescheduled: 'Rescheduled',
+  no_show: 'No Show',
+  rejected: 'Rejected',
+  expired: 'Expired',
+};
+
+export const PRIORITY_LABEL: Record<AppointmentPriority, string> = {
+  routine: 'Routine',
+  urgent: 'Urgent',
+  stat: 'STAT',
+};
+
+export const PAYMENT_LABEL: Record<PaymentStatus, string> = {
+  pending: 'Pending',
+  authorized: 'Authorized',
+  paid: 'Paid',
+  failed: 'Failed',
+  refunded: 'Refunded',
+  cancelled: 'Cancelled',
+  disputed: 'Disputed',
 };
 
 export const SPECIALTIES = [
@@ -331,56 +432,106 @@ export const seedExceptions: AvailabilityException[] = [
 ];
 
 export const seedAppointments: Appointment[] = [
-  { id: 'apt-1', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-1083', date: todayISO(), startTime: '10:30', endTime: '11:00', type: 'in_person', status: 'confirmed', bookingSource: 'public', notes: 'Routine cardiac review — brings latest reports.' },
-  { id: 'apt-2', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-0912', date: todayISO(), startTime: '11:30', endTime: '12:00', type: 'follow_up', status: 'confirmed', bookingSource: 'portal' },
-  { id: 'apt-3', facilityId: 'fac-city', facilityName: 'City Hospital', department: 'Cardiology', patientIdentifier: 'P-1277', date: todayISO(), startTime: '17:00', endTime: '17:20', type: 'video', status: 'pending', bookingSource: 'public' },
-  { id: 'apt-4', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-0764', date: todayISO(), startTime: '09:15', endTime: '09:45', type: 'in_person', status: 'completed', bookingSource: 'portal' },
-  { id: 'apt-5', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-1150', date: todayISO(), startTime: '12:15', endTime: '12:45', type: 'in_person', status: 'cancelled', bookingSource: 'public' },
-  { id: 'apt-6', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-1301', date: todayISO(), startTime: '15:30', endTime: '16:00', type: 'teleconsultation', status: 'no_show', bookingSource: 'public' },
-  { id: 'apt-7', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-1402', date: addDays(todayISO(), 1), startTime: '10:00', endTime: '10:30', type: 'in_person', status: 'confirmed', bookingSource: 'public' },
-  { id: 'apt-8', facilityId: 'fac-city', facilityName: 'City Hospital', department: 'Cardiology', patientIdentifier: 'P-1420', date: addDays(todayISO(), 2), startTime: '17:30', endTime: '17:50', type: 'video', status: 'confirmed', bookingSource: 'public' },
-  { id: 'apt-9', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-0999', date: addDays(todayISO(), 3), startTime: '11:00', endTime: '11:30', type: 'follow_up', status: 'pending', bookingSource: 'portal' },
-  { id: 'apt-10', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-0888', date: addDays(todayISO(), 5), startTime: '09:30', endTime: '10:00', type: 'in_person', status: 'confirmed', bookingSource: 'facility' },
-  { id: 'apt-11', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-1212', date: addDays(todayISO(), -2), startTime: '10:00', endTime: '10:30', type: 'in_person', status: 'completed', bookingSource: 'public' },
-  { id: 'apt-12', facilityId: 'fac-city', facilityName: 'City Hospital', department: 'Cardiology', patientIdentifier: 'P-1345', date: addDays(todayISO(), -1), startTime: '18:00', endTime: '18:20', type: 'video', status: 'completed', bookingSource: 'public' },
+  { id: 'apt-1', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-1083', patientId: 'pat-1083', patientName: 'John Smith', patientAge: 45, patientSex: 'Male', date: todayISO(), startTime: '10:30', endTime: '11:00', type: 'in_person', status: 'waiting', bookingSource: 'public', notes: 'Routine cardiac review — brings latest reports.', reason: 'Routine cardiac review', paymentStatus: 'paid', consentStatus: 'granted', telemedicine: false, priority: 'routine', assignedDoctor: 'Dr. Priya Nair', checkInStatus: 'checked_in', token: 18, room: 'Room 3' },
+  { id: 'apt-2', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-0912', patientId: 'pat-0912', patientName: 'Aisha Khan', patientAge: 32, patientSex: 'Female', date: todayISO(), startTime: '11:30', endTime: '12:00', type: 'follow_up', status: 'checked_in', bookingSource: 'portal', reason: 'AF follow-up / anticoagulation', paymentStatus: 'pending', consentStatus: 'pending', telemedicine: false, priority: 'routine', assignedDoctor: 'Dr. Priya Nair', checkInStatus: 'checked_in', token: 19, room: 'Room 3' },
+  { id: 'apt-3', facilityId: 'fac-city', facilityName: 'City Hospital', department: 'Cardiology', patientIdentifier: 'P-1277', patientId: 'pat-1277', patientName: 'Rahul Verma', patientAge: 57, patientSex: 'Male', date: todayISO(), startTime: '17:00', endTime: '17:20', type: 'video', status: 'waiting', bookingSource: 'public', reason: 'Chest pain evaluation', paymentStatus: 'authorized', consentStatus: 'granted', telemedicine: true, priority: 'stat', assignedDoctor: 'Dr. Priya Nair', checkInStatus: 'checked_in', token: 4 },
+  { id: 'apt-4', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-0764', patientId: 'pat-0764', patientName: 'Meera Menon', patientAge: 39, patientSex: 'Female', date: todayISO(), startTime: '09:15', endTime: '09:45', type: 'in_person', status: 'completed', bookingSource: 'portal', reason: 'New patient consult', paymentStatus: 'paid', consentStatus: 'not_required', telemedicine: false, priority: 'routine', assignedDoctor: 'Dr. Priya Nair', checkInStatus: 'called', token: 12, room: 'Room 3', encounterId: 'ENC-2401' },
+  { id: 'apt-5', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-1150', patientId: 'pat-1150', patientName: 'Arjun Patel', patientAge: 68, patientSex: 'Male', date: todayISO(), startTime: '12:15', endTime: '12:45', type: 'in_person', status: 'cancelled', bookingSource: 'public', reason: 'Heart failure review', paymentStatus: 'refunded', consentStatus: 'granted', telemedicine: false, priority: 'urgent', assignedDoctor: 'Dr. Priya Nair', checkInStatus: 'not_arrived', token: 21 },
+  { id: 'apt-6', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-1301', patientName: 'Sanjay Rao', patientAge: 51, patientSex: 'Male', date: todayISO(), startTime: '15:30', endTime: '16:00', type: 'teleconsultation', status: 'no_show', bookingSource: 'public', reason: 'BP review', paymentStatus: 'pending', consentStatus: 'granted', telemedicine: true, priority: 'routine', assignedDoctor: 'Dr. Priya Nair', checkInStatus: 'not_arrived', token: 27 },
+  { id: 'apt-13', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-1083', patientId: 'pat-1083', patientName: 'John Smith', patientAge: 45, patientSex: 'Male', date: todayISO(), startTime: '09:00', endTime: '09:15', type: 'walk_in', status: 'in_consultation', bookingSource: 'walk_in', reason: 'Home BP spike', paymentStatus: 'paid', consentStatus: 'granted', telemedicine: false, priority: 'urgent', assignedDoctor: 'Dr. Priya Nair', checkInStatus: 'called', token: 14, room: 'Room 3', encounterId: 'ENC-2410' },
+  { id: 'apt-7', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-1402', patientName: 'Leela Iyer', patientAge: 44, patientSex: 'Female', date: addDays(todayISO(), 1), startTime: '10:00', endTime: '10:30', type: 'in_person', status: 'confirmed', bookingSource: 'public', reason: 'Post-referral review', paymentStatus: 'pending', consentStatus: 'granted', telemedicine: false, priority: 'routine', assignedDoctor: 'Dr. Priya Nair', checkInStatus: 'not_arrived' },
+  { id: 'apt-8', facilityId: 'fac-city', facilityName: 'City Hospital', department: 'Cardiology', patientIdentifier: 'P-1420', patientName: 'Omar Sheikh', patientAge: 61, patientSex: 'Male', date: addDays(todayISO(), 2), startTime: '17:30', endTime: '17:50', type: 'video', status: 'confirmed', bookingSource: 'public', reason: 'Telemedicine follow-up', paymentStatus: 'authorized', consentStatus: 'granted', telemedicine: true, priority: 'routine', assignedDoctor: 'Dr. Priya Nair', checkInStatus: 'not_arrived' },
+  { id: 'apt-9', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-0999', patientName: 'Fatima Noor', patientAge: 29, patientSex: 'Female', date: addDays(todayISO(), 3), startTime: '11:00', endTime: '11:30', type: 'follow_up', status: 'requested', bookingSource: 'portal', reason: 'New patient request', paymentStatus: 'pending', consentStatus: 'pending', telemedicine: false, priority: 'routine', assignedDoctor: 'Dr. Priya Nair', checkInStatus: 'not_arrived' },
+  { id: 'apt-10', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-0888', patientName: 'Vikram Das', patientAge: 54, patientSex: 'Male', date: addDays(todayISO(), 5), startTime: '09:30', endTime: '10:00', type: 'in_person', status: 'confirmed', bookingSource: 'facility', reason: 'Pre-procedure review', paymentStatus: 'paid', consentStatus: 'granted', telemedicine: false, priority: 'routine', assignedDoctor: 'Dr. Priya Nair', checkInStatus: 'not_arrived' },
+  { id: 'apt-11', facilityId: 'fac-ghmc', facilityName: 'GlobalHealth Medical Center', department: 'Cardiology', patientIdentifier: 'P-1212', patientName: 'Anita Bose', patientAge: 47, patientSex: 'Female', date: addDays(todayISO(), -2), startTime: '10:00', endTime: '10:30', type: 'in_person', status: 'completed', bookingSource: 'public', reason: 'Hypertension review', paymentStatus: 'paid', consentStatus: 'granted', telemedicine: false, priority: 'routine', assignedDoctor: 'Dr. Priya Nair', checkInStatus: 'called', encounterId: 'ENC-2388' },
+  { id: 'apt-12', facilityId: 'fac-city', facilityName: 'City Hospital', department: 'Cardiology', patientIdentifier: 'P-1345', patientName: 'Kiran Shah', patientAge: 63, patientSex: 'Male', date: addDays(todayISO(), -1), startTime: '18:00', endTime: '18:20', type: 'video', status: 'completed', bookingSource: 'public', reason: 'Video consult', paymentStatus: 'paid', consentStatus: 'granted', telemedicine: true, priority: 'routine', assignedDoctor: 'Dr. Priya Nair', checkInStatus: 'called', encounterId: 'ENC-2394' },
+];
+
+export const seedTelemedicine: TelemedicineSession[] = [
+  { id: 'tm-1', appointmentId: 'apt-3', patientId: 'pat-1277', patientIdentifier: 'P-1277', patientName: 'Rahul Verma', status: 'waiting', scheduledAt: todayISO(), startTime: '17:00', consentStatus: 'granted', connectionStatus: 'idle', waitingSince: '16:48' },
+  { id: 'tm-2', appointmentId: 'apt-8', patientId: 'pat-1420', patientIdentifier: 'P-1420', patientName: 'Omar Sheikh', status: 'upcoming', scheduledAt: addDays(todayISO(), 2), startTime: '17:30', consentStatus: 'granted', connectionStatus: 'idle' },
+  { id: 'tm-3', appointmentId: 'apt-12', patientId: 'pat-1345', patientIdentifier: 'P-1345', patientName: 'Kiran Shah', status: 'completed', scheduledAt: addDays(todayISO(), -1), startTime: '18:00', durationMin: 18, consentStatus: 'granted', connectionStatus: 'ended' },
+  { id: 'tm-4', appointmentId: 'apt-6', patientId: 'pat-1301', patientIdentifier: 'P-1301', patientName: 'Sanjay Rao', status: 'missed', scheduledAt: todayISO(), startTime: '15:30', consentStatus: 'granted', connectionStatus: 'ended' },
 ];
 
 export const seedMessages: SecureMessage[] = [
   {
-    id: 'msg-1', senderName: 'Facility — GlobalHealth Medical Center', subject: 'Appointment update · P-1083', scope: 'clinical',
-    date: '2026-08-30', read: false,
+    id: 'msg-1', senderName: 'John Smith', subject: 'Home BP log · P-1083', scope: 'clinical',
+    conversationType: 'patient', patientId: 'pat-1083', patientIdentifier: 'P-1083',
+    date: todayISO(), read: false, pinned: true, priority: 'normal', online: false,
     messages: [
-      { fromMe: false, text: 'Patient P-1083 confirmed the 10:30 appointment and uploaded a recent ECG.', time: '08:10' },
+      { fromMe: false, text: 'Doctor, I uploaded this week’s home BP readings. Morning average is 128/82.', time: '08:10' },
+      { fromMe: true, text: 'Received — we will review them together at 10:30.', time: '08:18' },
     ],
   },
   {
-    id: 'msg-2', senderName: 'Central Clinic (Affiliations)', subject: 'Affiliation request received', scope: 'community',
-    date: '2026-08-28', read: true,
+    id: 'msg-lab', senderName: 'GHMC Central Laboratory', subject: 'Critical result · Troponin I · P-1277', scope: 'clinical',
+    conversationType: 'laboratory', patientId: 'pat-1277', patientIdentifier: 'P-1277',
+    date: todayISO(), read: false, priority: 'high', online: true,
     messages: [
-      { fromMe: false, text: 'Your affiliation request with Central Clinic — Cardiology Clinic has been received and is under review.', time: '14:00' },
+      { fromMe: false, text: 'Troponin I is available for Rahul Verma (P-1277). Flagged high. Please acknowledge review.', time: '17:06' },
     ],
   },
   {
-    id: 'msg-3', senderName: 'City Hospital — Scheduling Desk', subject: 'Thursday evening video slots', scope: 'community',
-    date: '2026-08-27', read: true,
+    id: 'msg-pharm', senderName: 'Wellness Pharmacy', subject: 'Substitution query · RX-GH-29483', scope: 'clinical',
+    conversationType: 'pharmacy', patientId: 'pat-1083', patientIdentifier: 'P-1083',
+    date: '2026-09-02', read: false, priority: 'normal', online: true,
+    messages: [
+      { fromMe: false, text: 'Telmisartan 40 mg is short. May we dispense an equivalent ARB pending your confirmation?', time: '11:22' },
+    ],
+  },
+  {
+    id: 'msg-doc', senderName: 'Dr. Ananya Rao', subject: 'Endocrine opinion · P-1083', scope: 'clinical',
+    conversationType: 'doctor', patientId: 'pat-1083', patientIdentifier: 'P-1083',
+    date: '2026-08-26', read: true, priority: 'normal', online: false,
+    messages: [
+      { fromMe: false, text: 'Happy to see John Smith. HbA1c 7.1% — I will tighten metformin and review in 8 weeks.', time: '16:40' },
+      { fromMe: true, text: 'Thank you. I have shared the lipid panel and current BP log.', time: '16:52' },
+    ],
+  },
+  {
+    id: 'msg-hosp', senderName: 'City Hospital — Scheduling Desk', subject: 'Thursday evening video slots', scope: 'community',
+    conversationType: 'hospital', date: '2026-08-27', read: true, muted: true,
     messages: [
       { fromMe: false, text: 'Video consultation slot availability updated for Thursday evenings.', time: '09:30' },
       { fromMe: true, text: 'Thanks — confirming the 20-minute slots work for us.', time: '09:45' },
     ],
   },
+  {
+    id: 'msg-staff', senderName: 'Nurse Anjali', subject: 'Queue note · Token 18', scope: 'clinical',
+    conversationType: 'staff', patientId: 'pat-1083', patientIdentifier: 'P-1083',
+    date: todayISO(), read: true, online: true,
+    messages: [
+      { fromMe: false, text: 'John Smith is checked in, Room 3. ECG uploaded to the encounter.', time: '10:12' },
+    ],
+  },
+  {
+    id: 'msg-2', senderName: 'Central Clinic (Affiliations)', subject: 'Affiliation request received', scope: 'community',
+    conversationType: 'hospital', date: '2026-08-28', read: true, archived: true,
+    messages: [
+      { fromMe: false, text: 'Your affiliation request with Central Clinic — Cardiology Clinic has been received and is under review.', time: '14:00' },
+    ],
+  },
 ];
 
 export const seedNotifications: NotificationItem[] = [
-  { id: 'ntf-1', title: 'Credential renewal reminder', message: 'Your license renewal window opens soon — see Credentials.', date: '2026-08-30', read: false },
-  { id: 'ntf-2', title: 'New appointment update', message: 'One appointment changed today. Review your schedule.', date: '2026-08-30', read: false },
-  { id: 'ntf-3', title: 'Affiliation under review', message: 'Central Clinic is reviewing your affiliation request.', date: '2026-08-28', read: true },
-  { id: 'ntf-4', title: 'New secure message', message: 'You have 1 unread secure message.', date: '2026-08-28', read: true },
+  { id: 'ntf-1', title: 'Critical laboratory result', message: 'Troponin I is available for Rahul Verma (P-1277). Immediate review required.', date: todayISO(), time: '17:06', read: false, category: 'clinical', priority: 'critical', source: 'Laboratory', patientIdentifier: 'P-1277', patientId: 'pat-1277', actionLabel: 'Review Result', actionView: 'labs' },
+  { id: 'ntf-2', title: 'Patient checked in', message: 'Token 18 — John Smith is waiting in Room 3.', date: todayISO(), time: '10:12', read: false, category: 'appointments', priority: 'high', source: 'Queue', patientIdentifier: 'P-1083', patientId: 'pat-1083', actionLabel: 'Open Queue', actionView: 'patients_appointments' },
+  { id: 'ntf-3', title: 'Consent request pending', message: 'Aisha Khan has not yet approved electrophysiology record access.', date: todayISO(), time: '09:40', read: false, category: 'clinical', priority: 'high', source: 'Consent', patientIdentifier: 'P-0912', patientId: 'pat-0912', actionLabel: 'Open EHR', actionView: 'ehr' },
+  { id: 'ntf-4', title: 'Telemedicine waiting room', message: 'Rahul Verma has entered the virtual waiting room.', date: todayISO(), time: '16:48', read: false, category: 'appointments', priority: 'high', source: 'Telemedicine', patientIdentifier: 'P-1277', patientId: 'pat-1277', actionLabel: 'Join Consultation', actionView: 'telemedicine' },
+  { id: 'ntf-5', title: 'New appointment request', message: 'Fatima Noor requested a follow-up.', date: todayISO(), time: '08:22', read: false, category: 'appointments', priority: 'normal', source: 'Scheduling', actionLabel: 'Review Request', actionView: 'patients_appointments' },
+  { id: 'ntf-6', title: 'Credential renewal reminder', message: 'Delhi Medical Council license expires in 20 days.', date: '2026-08-30', time: '08:00', read: false, category: 'administrative', priority: 'normal', source: 'Credentials', actionLabel: 'Open Credentials', actionView: 'profile' },
+  { id: 'ntf-7', title: 'EHR modification request', message: 'A change you requested is awaiting patient approval.', date: '2026-08-30', time: '11:10', read: true, category: 'clinical', priority: 'normal', source: 'EHR', patientIdentifier: 'P-1083', actionView: 'ehr' },
+  { id: 'ntf-8', title: 'Payment received', message: 'Consultation fee for Meera Menon has been paid.', date: todayISO(), time: '09:50', read: true, category: 'financial', priority: 'low', source: 'Billing', actionView: 'billing' },
+  { id: 'ntf-9', title: 'Unusual sign-in attempt blocked', message: 'A login from an unknown region was blocked and logged.', date: '2026-08-26', time: '02:14', read: true, category: 'security', priority: 'high', source: 'Security', actionView: 'audit' },
+  { id: 'ntf-10', title: 'New secure message', message: 'Facility sent an appointment update for P-1083.', date: '2026-08-30', time: '08:10', read: true, category: 'communication', priority: 'normal', source: 'Messages', actionView: 'messages' },
 ];
 
 export const seedReferrals: Referral[] = [
-  { id: 'ref-1', doctorId: 'doc-1001', facilityId: 'fac-ghmc', patientIdentifier: 'P-1083', specialty: 'Endocrinology', reason: 'Diabetic dyslipidemia — needs combined metabolic review.', status: 'sent', date: '2026-08-25' },
-  { id: 'ref-2', doctorId: 'doc-1001', facilityId: 'fac-city', patientIdentifier: 'P-0912', specialty: 'Neurology', reason: 'Recurrent episodes of vertigo — vestibular assessment.', status: 'accepted', date: '2026-08-20' },
-  { id: 'ref-3', doctorId: 'doc-1001', facilityId: 'fac-ghmc', patientIdentifier: 'P-1402', specialty: 'Pulmonology', reason: 'Chronic cough with suspected asthma — lung function review.', status: 'completed', date: '2026-08-14' },
+  { id: 'ref-1', doctorId: 'doc-1001', facilityId: 'fac-ghmc', patientIdentifier: 'P-1083', patientId: 'pat-1083', patientName: 'John Smith', specialty: 'Endocrinology', reason: 'Diabetic dyslipidemia — needs combined metabolic review.', status: 'sent', date: '2026-08-25', receivingProvider: 'Dr. Ananya Rao', receivingFacility: 'Metabolic Clinic', urgency: 'routine', requestedService: 'Combined metabolic review', clinicalSummary: 'T2DM + hypertension on Telmisartan/Metformin. HbA1c 7.1%.', attachments: ['HbA1c', 'Lipid profile'] },
+  { id: 'ref-2', doctorId: 'doc-1001', facilityId: 'fac-city', patientIdentifier: 'P-0912', patientId: 'pat-0912', patientName: 'Aisha Khan', specialty: 'Neurology', reason: 'Recurrent episodes of vertigo — vestibular assessment.', status: 'accepted', date: '2026-08-20', receivingProvider: 'Dr. Vivek Menon', receivingFacility: 'City Hospital Neurology', urgency: 'urgent', requestedService: 'Vestibular assessment', appointmentDate: addDays(todayISO(), 4), specialistResponse: 'Accepted — slot offered Thursday 11:00.' },
+  { id: 'ref-4', doctorId: 'doc-1001', facilityId: 'fac-ghmc', patientIdentifier: 'P-1277', patientId: 'pat-1277', patientName: 'Rahul Verma', specialty: 'Interventional Cardiology', reason: 'Possible ACS — urgent cath opinion.', status: 'scheduled', date: todayISO(), receivingProvider: 'Cath Lab on-call', receivingFacility: 'GlobalHealth Medical Center', urgency: 'stat', requestedService: 'Urgent coronary assessment', appointmentDate: todayISO(), clinicalSummary: 'Chest pain, Troponin I high, lateral ST depression.', attachments: ['Troponin I', '12-Lead ECG'] },
+  { id: 'ref-3', doctorId: 'doc-1001', facilityId: 'fac-ghmc', patientIdentifier: 'P-1402', patientName: 'Leela Iyer', specialty: 'Pulmonology', reason: 'Chronic cough with suspected asthma — lung function review.', status: 'completed', date: '2026-08-14', receivingProvider: 'Dr. Farah Qureshi', receivingFacility: 'City Pulmonology', urgency: 'routine', requestedService: 'Spirometry + consult', specialistResponse: 'Asthma confirmed. Inhaler started. Notes returned.' },
 ];
 
 export const seedDocuments: PortalDocument[] = [
@@ -507,12 +658,27 @@ export const doctorPortalApi = {
 /* ------------------------------------------------------------------ */
 
 export type WorkspaceView =
-  | 'dashboard' | 'calendar' | 'availability' | 'appointments'
-  | 'profile' | 'credentials' | 'affiliations'
-  | 'patients' | 'consultations' | 'prescriptions' | 'labs' | 'imaging' | 'billing'
-  | 'messages' | 'notifications' | 'referrals' | 'documents'
-  | 'security' | 'sessions' | 'delegated' | 'audit'
-  | 'insights' | 'help' | 'support';
+  | 'dashboard'
+  | 'patients_appointments'
+  | 'messages'
+  | 'notifications'
+  | 'ehr'
+  | 'consultations'
+  | 'prescriptions'
+  | 'labs'
+  | 'vitals'
+  | 'referrals'
+  | 'telemedicine'
+  | 'profile'
+  | 'billing'
+  | 'ai'
+  | 'schedule'
+  | 'audit'
+  | 'settings'
+  /* legacy aliases kept so existing modules continue to compile */
+  | 'calendar' | 'availability' | 'appointments' | 'patients'
+  | 'credentials' | 'affiliations' | 'imaging' | 'documents'
+  | 'security' | 'sessions' | 'delegated' | 'insights' | 'help' | 'support';
 
 interface DoctorPortalState {
   doctor: DoctorProfile;
@@ -526,6 +692,7 @@ interface DoctorPortalState {
   availability: AvailabilityRule[];
   exceptions: AvailabilityException[];
   appointments: Appointment[];
+  telemedicineSessions: TelemedicineSession[];
   messages: SecureMessage[];
   notifications: NotificationItem[];
   referrals: Referral[];
@@ -542,7 +709,12 @@ interface DoctorPortalState {
   updateVerificationStatus: (status: VerificationStatus) => void;
   addCredential: (c: Omit<Credential, 'id' | 'doctorId' | 'verifiedAt' | 'status'> & { status?: CredentialStatus }) => void;
   setAppointmentStatus: (id: string, status: AppointmentStatus) => void;
+  rescheduleAppointment: (id: string, date: string, startTime: string, endTime: string) => void;
+  callNextPatient: () => Appointment | null;
+  updateTelemedicineSession: (id: string, patch: Partial<TelemedicineSession>) => void;
   addReferral: (r: Omit<Referral, 'id'>) => void;
+  updateReferral: (id: string, patch: Partial<Referral>) => void;
+  patchMessage: (id: string, patch: Partial<SecureMessage>) => void;
   requestAffiliation: (facilityId: string, department: string) => void;
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
@@ -578,6 +750,7 @@ export const DoctorPortalProvider: React.FC<{ children: React.ReactNode; initial
   const [availability, setAvailability] = useState<AvailabilityRule[]>(seedAvailability);
   const [exceptions, setExceptions] = useState<AvailabilityException[]>(seedExceptions);
   const [appointments, setAppointments] = useState<Appointment[]>(seedAppointments);
+  const [telemedicineSessions, setTelemedicineSessions] = useState<TelemedicineSession[]>(seedTelemedicine);
   const [messages, setMessages] = useState<SecureMessage[]>(seedMessages);
   const [notifications, setNotifications] = useState<NotificationItem[]>(seedNotifications);
   const [referrals, setReferrals] = useState<Referral[]>(seedReferrals);
@@ -630,11 +803,48 @@ export const DoctorPortalProvider: React.FC<{ children: React.ReactNode; initial
   }, [doctor.id]);
 
   const setAppointmentStatus = useCallback((id: string, status: AppointmentStatus) => {
-    setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
+    setAppointments((prev) => prev.map((a) => {
+      if (a.id !== id) return a;
+      const patch: Partial<Appointment> = { status };
+      if (status === 'checked_in' || status === 'waiting') patch.checkInStatus = 'checked_in';
+      if (status === 'in_consultation') patch.checkInStatus = 'called';
+      return { ...a, ...patch };
+    }));
+  }, []);
+
+  const rescheduleAppointment = useCallback((id: string, date: string, startTime: string, endTime: string) => {
+    setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, date, startTime, endTime, status: 'rescheduled' } : a)));
+  }, []);
+
+  const callNextPatient = useCallback((): Appointment | null => {
+    const today = new Date().toISOString().slice(0, 10);
+    let called: Appointment | null = null;
+    setAppointments((prev) => {
+      const waiting = prev
+        .filter((a) => a.facilityId === activeFacilityId && a.date === today && (a.status === 'waiting' || a.status === 'checked_in'))
+        .sort((a, b) => (a.token || 99) - (b.token || 99) || a.startTime.localeCompare(b.startTime));
+      const next = waiting[0];
+      if (!next) return prev;
+      called = { ...next, status: 'in_consultation', checkInStatus: 'called' };
+      return prev.map((a) => (a.id === next.id ? called! : a));
+    });
+    return called;
+  }, [activeFacilityId]);
+
+  const updateTelemedicineSession = useCallback((id: string, patch: Partial<TelemedicineSession>) => {
+    setTelemedicineSessions((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
   }, []);
 
   const addReferral = useCallback((r: Omit<Referral, 'id'>) => {
     setReferrals((prev) => [{ ...r, id: `ref-${Date.now()}` }, ...prev]);
+  }, []);
+
+  const updateReferral = useCallback((id: string, patch: Partial<Referral>) => {
+    setReferrals((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }, []);
+
+  const patchMessage = useCallback((id: string, patch: Partial<SecureMessage>) => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   }, []);
 
   const requestAffiliation = useCallback((facilityId: string, department: string) => {
@@ -727,19 +937,19 @@ export const DoctorPortalProvider: React.FC<{ children: React.ReactNode; initial
     actorRole: 'DOCTOR',
     permissions: DOCTOR_PERMISSIONS,
     activeFacilityId, credentials, affiliations, availability, exceptions,
-    appointments, messages, notifications, referrals, documents, auditEvents, sessions,
+    appointments, telemedicineSessions, messages, notifications, referrals, documents, auditEvents, sessions,
     delegated, tickets, security, notificationPrefs,
     setDoctor, setActiveFacility, updateProfile, updateVerificationStatus, addCredential,
-    setAppointmentStatus, addReferral, requestAffiliation, markNotificationRead,
+    setAppointmentStatus, rescheduleAppointment, callNextPatient, updateTelemedicineSession, addReferral, updateReferral, patchMessage, requestAffiliation, markNotificationRead,
     markAllNotificationsRead, toggleNotificationPref, sendMessage, markMessageRead,
     addDocument, addAvailabilityRule, removeAvailabilityRule, addAvailabilityException,
     removeAvailabilityException, setMfaEnabled, revokeSession, addDelegatedAccess,
     revokeDelegatedAccess, addTicket, addAuditEvent,
   }), [doctor, activeFacilityId, credentials, affiliations, availability, exceptions,
-    appointments, messages, notifications, referrals, documents, auditEvents, sessions,
+    appointments, telemedicineSessions, messages, notifications, referrals, documents, auditEvents, sessions,
     delegated, tickets, security, notificationPrefs,
-    updateProfile, updateVerificationStatus, addCredential, setAppointmentStatus,
-    addReferral, requestAffiliation, markNotificationRead, markAllNotificationsRead,
+    updateProfile, updateVerificationStatus, addCredential, setAppointmentStatus, rescheduleAppointment, callNextPatient, updateTelemedicineSession,
+    addReferral, updateReferral, patchMessage, requestAffiliation, markNotificationRead, markAllNotificationsRead,
     toggleNotificationPref, sendMessage, markMessageRead, addDocument, addAvailabilityRule,
     removeAvailabilityRule, addAvailabilityException, removeAvailabilityException,
     setMfaEnabled, revokeSession, addDelegatedAccess, revokeDelegatedAccess, addTicket, addAuditEvent]);
