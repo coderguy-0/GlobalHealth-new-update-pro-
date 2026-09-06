@@ -239,7 +239,11 @@ export function retrieveDirectoryKnowledgeScored(
   // in here: a device whose name contains "Index" is not a BMI calculator.
   const textLower = expandSpecialties(String(text || '').toLowerCase());
   const hits: { hit: DirectoryHit; score: number }[] = [];
-  const EXACT_SCORE = 30;
+  // Exact identity matches are precise but not automatically the BEST answer:
+  // "tell me about paracetamol" is a library question, "is Dolo in stock" is a
+  // directory question. This score keeps exact directory hits well above weak
+  // engine matches while letting a strong verified-library match lead.
+  const EXACT_SCORE = 20;
 
   // Relationship lookups (spec PART 19): hospitalId → hospital name, and
   // hospitalId → department names. Real application links only.

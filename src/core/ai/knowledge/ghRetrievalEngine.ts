@@ -112,17 +112,25 @@ export const ENGINE_STOPWORDS = new Set([
   'tomorrow', 'yesterday', 'now', 'thanks', 'okay',
 ]);
 
-/** Conservative stemmer: plurals and simple verb endings only. */
+/**
+ * Conservative stemmer: plurals, simple verb endings and a trailing silent
+ * "e". The last rule matters more than it looks — without it "cause",
+ * "causes" and "caused" produce three different keys and the typo repair
+ * starts inventing matches between them.
+ */
 export function stemToken(word: string): string {
-  const w = word;
+  let w = word;
   if (w.length <= 3) return w;
-  if (w.endsWith("'s")) return stemToken(w.slice(0, -2));
-  if (w.endsWith('ies') && w.length > 4) return `${w.slice(0, -3)}y`;
-  if (w.endsWith('sses')) return w.slice(0, -2);
-  if (/(ches|shes|xes|zes)$/.test(w)) return w.slice(0, -2);
-  if (w.endsWith('s') && !/(ss|us|is|as|os)$/.test(w)) return w.slice(0, -1);
-  if (w.endsWith('ing') && w.length > 6) return w.slice(0, -3);
-  if (w.endsWith('ed') && w.length > 5) return w.slice(0, -2);
+  if (w.endsWith("'s")) w = w.slice(0, -2);
+  if (w.endsWith('ies') && w.length > 4) w = `${w.slice(0, -3)}y`;
+  else if (w.endsWith('sses')) w = w.slice(0, -2);
+  else if (/(ches|shes|xes|zes)$/.test(w)) w = w.slice(0, -2);
+  else if (w.endsWith('s') && !/(ss|us|is|as|os)$/.test(w)) w = w.slice(0, -1);
+  else if (w.endsWith('ing') && w.length > 6) w = w.slice(0, -3);
+  else if (w.endsWith('ed') && w.length > 5) w = w.slice(0, -2);
+  // Trailing silent "e" (cause -> caus, migraine -> migrain), but never for a
+  // vowel pair like "value" or a short word.
+  if (w.length >= 5 && w.endsWith('e') && !/[aeiou]e$/.test(w)) w = w.slice(0, -1);
   return w;
 }
 
@@ -163,6 +171,7 @@ interface IndexedDoc<T> {
   identity: Set<string>;
   length: number;
   titlePhrase: string;
+  titleTokens: string[];
 }
 
 export interface RetrievalIndex<T = unknown> {
@@ -208,6 +217,7 @@ export function buildRetrievalIndex<T>(docs: EngineDoc<T>[]): RetrievalIndex<T> 
       identity,
       length,
       titlePhrase: normalizePhrase(doc.title),
+      titleTokens: tokenize(doc.title),
     });
     totalLength += length;
 
@@ -273,6 +283,13 @@ export function withinOneEdit(a: string, b: string): boolean {
   return edits <= 1;
 }
 
+/** True when one term is the other plus/minus a trailing character. */
+export function isTrailingEdit(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) !== 1) return false;
+  const [shortT, longT] = a.length < b.length ? [a, b] : [b, a];
+  return longT.startsWith(shortT);
+}
+
 function repairTerm<T>(index: RetrievalIndex<T>, term: string): string | null {
   if (term.length < 5) return null;
   let best: string | null = null;
@@ -283,6 +300,9 @@ function repairTerm<T>(index: RetrievalIndex<T>, term: string): string | null {
       if (seen.has(candidate)) continue;
       seen.add(candidate);
       if (!withinOneEdit(term, candidate)) continue;
+      // A difference at the very END of the word is morphology, not a typo
+      // ("cause" must never be repaired into the stem artefact "caus").
+      if (isTrailingEdit(term, candidate)) continue;
       const dfv = index.df.get(candidate) ?? 0;
       if (dfv > bestDf) {
         bestDf = dfv;
@@ -368,6 +388,10 @@ export function searchIndex<T>(
   if (!terms.length || !index.size) return [];
 
   const queryPhrase = normalizePhrase(query);
+  const queryTokens = tokenize(query);
+  const queryTokenSet = new Set(queryTokens);
+  const queryBigrams: string[] = [];
+  for (let i = 0; i + 1 < queryTokens.length; i += 1) queryBigrams.push(`${queryTokens[i]} ${queryTokens[i + 1]}`);
   const expansionPhrases = (options.expansions ?? [])
     .map((e) => normalizePhrase(e))
     .filter((p) => p.length >= 4);
@@ -410,6 +434,15 @@ export function searchIndex<T>(
     // Alias phrase in the title ("myocardial infarction" for "heart attack").
     if (entry.titlePhrase && expansionPhrases.some((p) => entry.titlePhrase.includes(p))) {
       score *= 1.5;
+    }
+
+    // The user effectively said the record's whole name ("lipid profile" →
+    // "Lipid Profile", not "Specialized Lipid Profile Assay Marker #6").
+    if (entry.titleTokens.length && entry.titleTokens.every((t) => queryTokenSet.has(t))) {
+      score *= 1.6;
+    } else if (queryBigrams.length && queryBigrams.some((b) => entry.titlePhrase.includes(b))) {
+      // A two-word phrase from the question appears verbatim in the title.
+      score *= 1.25;
     }
 
     // Prefer focused records over sprawling ones when scores are close.

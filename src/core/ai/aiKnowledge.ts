@@ -197,6 +197,12 @@ const WEAK_CLINICAL_TERMS = new Set([
   'index', 'ratio', 'total', 'high', 'low', 'normal', 'acute', 'chronic',
   'serum', 'urine', 'body', 'health', 'medicine', 'medication', 'drug',
   'tablet', 'dose', 'result', 'report', 'range', 'value', 'assay', 'study',
+  'child', 'children', 'kid', 'baby', 'infant', 'adult', 'elderly', 'women',
+  'woman', 'men', 'man', 'pediatric', 'specialized', 'marker', 'type',
+  // Question scaffolding and ambiguous everyday words: they describe what the
+  // user wants to know, not which record answers it.
+  'caus', 'symptom', 'sign', 'treatment', 'cure', 'prevention', 'diagnosis',
+  'motion', 'problem', 'condition', 'issue', 'pain', 'care', 'management',
 ]);
 
 const PLATFORM_ONLY_TERMS = new Set([
@@ -225,7 +231,7 @@ export function rankVerifiedKnowledge(
   text: string,
   maxHits = MAX_HITS,
   options: VerifiedRetrievalOptions = {}
-): { hit: KnowledgeSource; score: number }[] {
+): { hit: KnowledgeSource; score: number; matched: string[] }[] {
   const query = String(text || '');
   if (!query.trim()) return [];
   // Alias-aware retrieval (spec §96): layman phrases ("heart attack") are
@@ -241,7 +247,7 @@ export function rankVerifiedKnowledge(
     protectedTerms: NON_CLINICAL_TERMS,
   });
 
-  const out: { hit: KnowledgeSource; score: number }[] = [];
+  const out: { hit: KnowledgeSource; score: number; matched: string[] }[] = [];
   const seen = new Set<string>();
   for (const s of scored) {
     if (out.length >= maxHits) break;
@@ -256,7 +262,7 @@ export function rankVerifiedKnowledge(
     const key = `${hit.kind}:${hit.name.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ hit, score: s.score });
+    out.push({ hit, score: s.score, matched: s.matched });
   }
   return out;
 }

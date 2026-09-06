@@ -150,11 +150,16 @@ export function retrieveAccountKnowledge(
   if (!authenticated) return [];
   const query = String(text || '');
   if (!query.trim()) return [];
-  return searchIndex(accountIndex(), query, {
+  const hits = searchIndex(accountIndex(), query, {
     limit: maxHits,
     maxPerType: maxHits,
     minScore: 1.6,
     relativeCutoff: 0.35,
     expansions: aliasExpansions(query),
   });
+  // This layer is a 7-record corpus, so its raw BM25 scores are structurally
+  // lower than the 2800-document public index. When the owner asks about
+  // "my" dashboard/appointments/history, their own account section should
+  // lead the answer — this puts the scores on a comparable footing.
+  return hits.map((h) => ({ ...h, score: h.score * 2.4 }));
 }

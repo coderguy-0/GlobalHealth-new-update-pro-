@@ -83,8 +83,19 @@ const INTENT_RULES: { test: RegExp; boosts: Record<string, number> }[] = [
   { test: /\b(faq|question|questions|can i|should i|is it safe|how long)\b/i, boosts: { FAQ: 1.4 } },
 ];
 
+/**
+ * Community posts are user-generated and explicitly NOT medical authority, so
+ * they are de-prioritised unless the user actually asked about the community.
+ */
+const DEFAULT_TYPE_WEIGHTS: Record<string, number> = {
+  COMMUNITY_POST: 0.5,
+  // A single FAQ answer is narrower than the medicine/disease page it came
+  // from, so it supports the answer instead of leading it.
+  FAQ: 0.75,
+};
+
 export function detectContentIntent(text: string): Record<string, number> {
-  const boosts: Record<string, number> = {};
+  const boosts: Record<string, number> = { ...DEFAULT_TYPE_WEIGHTS };
   for (const rule of INTENT_RULES) {
     if (!rule.test.test(text)) continue;
     for (const [type, value] of Object.entries(rule.boosts)) {

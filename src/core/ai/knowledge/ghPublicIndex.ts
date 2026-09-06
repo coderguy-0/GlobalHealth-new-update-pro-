@@ -627,6 +627,9 @@ export function searchPublicIndex(text: string, maxPerType = 2, totalMax = 6): P
   return searchPublicIndexScored(text, { maxPerType, limit: totalMax }).map((h) => h.doc.ref);
 }
 
+/** Honorifics identify a person's title, never a document. */
+const WEAK_PUBLIC_TERMS = new Set(['dr', 'prof', 'professor', 'mr', 'mrs', 'ms', 'shri', 'sir', 'madam']);
+
 export interface PublicIndexSearchOptions {
   maxPerType?: number;
   limit?: number;
@@ -648,5 +651,6 @@ export function searchPublicIndexScored(
     typeBoosts: options.typeBoosts,
     minScore: options.minScore ?? 1.15,
     expansions: aliasExpansions(query),
+    weakIdentityTerms: WEAK_PUBLIC_TERMS,
   });
 }

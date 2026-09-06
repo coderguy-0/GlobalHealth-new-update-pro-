@@ -7,10 +7,13 @@
    never replace or override the user's own words.
    ========================================================================== */
 
+import { normalizePhrase } from './ghRetrievalEngine';
+
 export const GH_ALIASES: Record<string, string[]> = {
   'heart attack': ['myocardial infarction', 'cardiac arrest'],
   'cardiac arrest': ['heart attack'],
   'high blood pressure': ['hypertension'],
+  bp: ['blood pressure', 'hypertension'],
   hypertension: ['high blood pressure'],
   'low blood pressure': ['hypotension'],
   hypotension: ['low blood pressure'],
@@ -189,10 +192,19 @@ export const GH_ALIASES: Record<string, string[]> = {
   'delete my data': ['privacy', 'consent', 'data rights'],
 };
 
-/** Word-boundary aware phrase detection (so "tb" never matches "outbreak"). */
+/**
+ * Word-boundary AND morphology aware phrase detection: "tb" never matches
+ * "outbreak", and "loose motions" still matches the "loose motion" alias
+ * because both sides are normalised with the retrieval engine's stemmer.
+ */
 function containsPhrase(haystack: string, phrase: string): boolean {
-  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`).test(haystack);
+  const escaped = (p: string) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const direct = new RegExp(`(^|[^a-z0-9])${escaped(phrase)}([^a-z0-9]|$)`);
+  if (direct.test(haystack)) return true;
+  const normalizedPhrase = normalizePhrase(phrase);
+  if (!normalizedPhrase) return false;
+  const normalizedHaystack = normalizePhrase(haystack);
+  return new RegExp(`(^|[^a-z0-9])${escaped(normalizedPhrase)}([^a-z0-9]|$)`).test(normalizedHaystack);
 }
 
 /**
