@@ -1,5 +1,6 @@
 import React from 'react';
-import { ArrowRight, CheckCircle2, Siren } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Siren, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { sendAiFeedback } from './aiApi';
 import { AIAvatar } from './AIAvatar';
 import type { AIMessage as AIMessageType } from './types';
 import { suggestActionCards, type AIActionCard, URGENT_CARE_NOTE } from './aiUtils';
@@ -159,6 +160,14 @@ interface AIMessageProps {
 export const AIMessage: React.FC<AIMessageProps> = ({ message, userPrompt, urgent, footer, onNavigate }) => {
   const isAssistant = message.role === 'assistant';
   const time = new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // Privacy-first feedback (spec PART 92): sends the rating only — never the
+  // question or answer text. Fire-once per message, best-effort.
+  const [feedback, setFeedback] = React.useState<'helpful' | 'not_helpful' | null>(null);
+  const sendFeedback = (rating: 'helpful' | 'not_helpful') => {
+    if (feedback) return;
+    setFeedback(rating);
+    void sendAiFeedback(rating, undefined, typeof window !== 'undefined' ? window.location.hash.replace(/^#\/?/, '').split('/')[0] || 'home' : undefined);
+  };
 
   if (!isAssistant) {
     return (
@@ -173,6 +182,7 @@ export const AIMessage: React.FC<AIMessageProps> = ({ message, userPrompt, urgen
 
   const lines = message.content.split('\n');
   const cards = userPrompt ? suggestActionCards(userPrompt, message.content) : [];
+  const showFeedbackRow = isAssistant && !message.failed && message.content.trim().length > 0;
   const isEmptyFailure = message.content.trim() === '' && message.failed;
 
   return (
@@ -204,6 +214,30 @@ export const AIMessage: React.FC<AIMessageProps> = ({ message, userPrompt, urgen
 
           <span className="mt-2 block text-[10px] font-medium text-slate-400">{time}</span>
         </div>
+        )}
+
+        {showFeedbackRow && (
+          <div className="flex items-center gap-1" aria-label="Was this answer helpful?">
+            <button
+              type="button"
+              onClick={() => sendFeedback('helpful')}
+              aria-pressed={feedback === 'helpful'}
+              aria-label="Helpful answer"
+              className={`grid h-7 w-7 place-items-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-medical-500 ${feedback === 'helpful' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'}`}
+            >
+              <ThumbsUp className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => sendFeedback('not_helpful')}
+              aria-pressed={feedback === 'not_helpful'}
+              aria-label="Not helpful answer"
+              className={`grid h-7 w-7 place-items-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-medical-500 ${feedback === 'not_helpful' ? 'bg-rose-100 text-rose-700' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'}`}
+            >
+              <ThumbsDown className="h-3.5 w-3.5" />
+            </button>
+            {feedback && <span className="text-[10px] font-medium text-slate-400">Thanks for your feedback</span>}
+          </div>
         )}
 
         {!isEmptyFailure && cards.length > 0 && (

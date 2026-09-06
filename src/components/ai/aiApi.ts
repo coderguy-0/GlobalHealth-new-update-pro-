@@ -253,6 +253,15 @@ export interface AssistantRequestContext {
    * references ("the second one"), maintain topic continuity, and avoid
    * repeating prior answers. Bounded and sanitized server-side. */
   conversationHistory?: string;
+  /** Signed-in users ONLY: a compact snapshot of the dashboard data this user
+   * already sees in their own browser (vitals, medications, labs,
+   * appointments). The server treats it as self-reported, non-authoritative
+   * context and drops it entirely for guests. */
+  personalHealthSnapshot?: string;
+  /** Page-aware assistance: the public section key the user came from
+   * (e.g. "medicines"). The server resolves it against its published
+   * navigation knowledge; unknown keys are ignored. Never private. */
+  pageContext?: { route?: string };
 }
 
 /** Calls the Gemini-backed assistant endpoint with the signed-in caller's own
@@ -312,6 +321,26 @@ export async function requestAssistantResponse(
   } finally {
     window.clearTimeout(timeout);
     signal?.removeEventListener('abort', onAbort);
+  }
+}
+
+export type AiFeedbackRating = 'helpful' | 'not_helpful';
+export type AiFeedbackCategory = 'INCORRECT' | 'OUTDATED' | 'UNSAFE' | 'MISSING' | 'WRONG_NAVIGATION' | 'WRONG_ENTITY' | 'OTHER';
+
+/** Sends a privacy-first feedback signal: rating + optional category/section
+ * only. The question and answer text are NEVER sent or stored (spec PART 93). */
+export async function sendAiFeedback(
+  rating: AiFeedbackRating,
+  category?: AiFeedbackCategory,
+  route?: string
+): Promise<void> {
+  try {
+    await apiFetch('/api/ai/feedback', {
+      method: 'POST',
+      body: { rating, category, route },
+    });
+  } catch {
+    // Feedback is best-effort; it must never disturb the conversation.
   }
 }
 

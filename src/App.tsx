@@ -258,6 +258,9 @@ export default function App() {
   const [overlayTab, setOverlayTab] = useState<NavigationTab | null>(null);
   // Optional prompt pre-filled when a user asks AI from a context page (e.g. a disease).
   const [aiInitialPrompt, setAiInitialPrompt] = useState<string | undefined>(undefined);
+  // AI page-context (safe): remembers the public section the user was on
+  // before opening the AI assistant, so "this section" resolves correctly.
+  const aiOriginTabRef = useRef<NavigationTab>('home');
   // The AI workspace stays mounted after its first open so the guest session
   // conversation survives page navigation — but it is NOT mounted (nor its
   // lazy chunk loaded) until the user actually opens the assistant.
@@ -386,6 +389,7 @@ export default function App() {
         setOverlayTab(null);
         setCurrentTabState(tab);
         if (tab === 'ai-assistant') setHasOpenedAssistant(true);
+      else aiOriginTabRef.current = tab;
       }
     };
     apply();
@@ -975,6 +979,7 @@ export default function App() {
               currentLanguage={currentLanguage}
               initialPrompt={aiInitialPrompt}
               active={currentTab === 'ai-assistant'}
+              originTab={aiOriginTabRef.current}
               onBack={() => setCurrentTab('home')}
               onNavigate={(tab) => handleNavTabChange(tab as Parameters<typeof handleNavTabChange>[0])}
               onLogout={async () => {

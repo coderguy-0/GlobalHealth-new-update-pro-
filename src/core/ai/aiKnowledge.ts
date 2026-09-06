@@ -15,9 +15,10 @@
 import { ALL_400_MEDICINES } from '../../data/medicines/index';
 import { ALL_DISEASES } from '../../data/diseases/diseaseIndex';
 import { ALL_1000_MEDICAL_TESTS } from '../../data/medicalTests/index';
+import { expandQueryWithAliases } from './knowledge/ghAliases';
 
 export interface KnowledgeSource {
-  kind: 'medicine' | 'disease' | 'test';
+  kind: 'medicine' | 'disease' | 'test' | 'doctor' | 'hospital' | 'pharmacy-product';
   name: string;
   source: string;
   summary: string;
@@ -35,8 +36,26 @@ const MAX_HITS = 3;
 function nameMatches(name: string, text: string): boolean {
   const n = name.trim().toLowerCase();
   if (!n || n.length < 3) return false;
-  return text.includes(n);
+  // Full-phrase containment first (exact, precise).
+  if (text.includes(n)) return true;
+  // Then token-aware matching: real platform names are multi-word
+  // ("Essential hypertension", "Paracetamol IP 650mg") and users rarely type
+  // them verbatim. Require a strong fraction of significant (4+ char) tokens.
+  // Ultra-generic clinical words are ignored so "blood" alone can never drag
+  // in an unrelated entry (e.g. an arterial blood gas test for a BP question).
+  // Tokens must appear as WHOLE WORDS — "total" must never match "totally".
+  const tokens = n
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 4 && !TOKEN_GENERIC_WORDS.has(t));
+  if (!tokens.length) return false;
+  const found = tokens.filter((t) => new RegExp(`\\b${t}\\b`).test(text)).length;
+  return found / tokens.length >= 0.5;
 }
+
+// Words so common in clinical naming that they carry almost no identity.
+const TOKEN_GENERIC_WORDS = new Set([
+  'blood', 'test', 'tests', 'profile', 'panel', 'level', 'levels', 'function', 'general', 'complete', 'disease', 'disorder', 'infection',
+]);
 
 function medicineSnippet(m: (typeof ALL_400_MEDICINES)[number]): KnowledgeSource {
   const details = [
@@ -45,6 +64,13 @@ function medicineSnippet(m: (typeof ALL_400_MEDICINES)[number]): KnowledgeSource
     m.therapeuticGroup ? `Therapeutic group: ${m.therapeuticGroup}` : '',
     m.prescriptionStatus ? `Prescription status: ${m.prescriptionStatus}` : '',
     m.warnings ? `Safety note: ${m.warnings}` : '',
+    // Publicly listed common side effects (spec PART 21) — capped, verbatim.
+    (m as any).commonSideEffects?.length
+      ? `Common side effects (as listed): ${(m as any).commonSideEffects.slice(0, 4).join('; ')}`
+      : (m as any).sideEffects?.length
+        ? `Side effects (as listed): ${(m as any).sideEffects.slice(0, 4).join('; ')}`
+        : '',
+    (m as any).faqs?.length ? `${(m as any).faqs.length} clinical FAQs on its GlobalHealth page` : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -58,8 +84,18 @@ function medicineSnippet(m: (typeof ALL_400_MEDICINES)[number]): KnowledgeSource
 }
 
 function diseaseSnippet(d: (typeof ALL_DISEASES)[number]): KnowledgeSource {
+  // Relationship graph (spec PART 19/20): the specialty that manages this
+  // condition and the key public facts shown on the disease page are placed
+  // FIRST so long symptom lists can never crowd them out of the bounded block.
+  const relations = [
+    (d as any).specialist ? `Related specialty (as listed): ${(d as any).specialist}` : '',
+    (d as any).severity ? `Severity (as listed): ${(d as any).severity}` : '',
+    d.contagious !== undefined && d.contagious !== null ? `Contagious (as listed): ${d.contagious}` : '',
+    typeof (d as any).vaccineAvailable === 'boolean' ? `Vaccine available: ${(d as any).vaccineAvailable ? 'yes' : 'no'}` : '',
+  ].filter(Boolean);
   const details = [
     d.summary || '',
+    ...relations,
     d.symptoms?.length ? `Common associated symptoms: ${d.symptoms.slice(0, 6).join('; ')}` : '',
     d.whenToSeeDoctor ? `When to see a doctor: ${d.whenToSeeDoctor}` : '',
     d.whenToSeekEmergencyCare ? `Emergency signs: ${d.whenToSeekEmergencyCare}` : '',
@@ -71,16 +107,21 @@ function diseaseSnippet(d: (typeof ALL_DISEASES)[number]): KnowledgeSource {
     name: d.title || d.medicalName || d.commonName || 'Condition',
     source: 'GlobalHealth Verified Disease & Condition Library',
     summary: d.summary || '',
-    details,
+    details: String(details).slice(0, 1200),
   };
 }
 
 function testSnippet(t: (typeof ALL_1000_MEDICAL_TESTS)[number]): KnowledgeSource {
+  const cap = (v: unknown, n: number): string => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
   const details = [
     t.purpose || t.description || t.overview || '',
     t.normalRange ? `Reference range: ${t.normalRange}` : '',
     t.preparation ? `Preparation: ${t.preparation}` : '',
     t.sampleType ? `Sample type: ${t.sampleType}` : '',
+    (t as any).timeToResults ? `Turnaround (as listed): ${cap((t as any).timeToResults, 40)}` : '',
+    // Interpretation education from the page (spec PART 22) — capped, verbatim.
+    (t as any).highInterpretation ? `High results (as listed): ${cap((t as any).highInterpretation, 160)}` : '',
+    (t as any).lowInterpretation ? `Low results (as listed): ${cap((t as any).lowInterpretation, 160)}` : '',
     t.whenNotInterpretedAlone?.length ? `Not to be interpreted alone: ${t.whenNotInterpretedAlone.slice(0, 3).join('; ')}` : '',
   ]
     .filter(Boolean)
@@ -95,7 +136,10 @@ function testSnippet(t: (typeof ALL_1000_MEDICAL_TESTS)[number]): KnowledgeSourc
 }
 
 export function retrieveVerifiedKnowledge(text: string, maxHits = MAX_HITS): KnowledgeResult {
-  const clean = String(text || '').toLowerCase();
+  // Alias-aware retrieval (spec §96): layman phrases ("heart attack") are
+  // expanded with their clinical terms ("myocardial infarction") BEFORE
+  // matching, so verified content is found without weakening exact matching.
+  const clean = expandQueryWithAliases(String(text || '')).toLowerCase();
   const hits: KnowledgeSource[] = [];
   const seen = new Set<string>();
 
@@ -128,10 +172,11 @@ export function retrieveVerifiedKnowledge(text: string, maxHits = MAX_HITS): Kno
   }
 
   const limited = hits.slice(0, maxHits);
+  const retrievedAt = new Date().toISOString().slice(0, 10);
   const context = limited.length
-    ? `\nVERIFIED GLOBALHEALTH PLATFORM DATA FOUND:\n${limited
+    ? `\nVERIFIED GLOBALHEALTH PLATFORM DATA FOUND (retrieved ${retrievedAt}):\n${limited
         .map((h, i) => `${i + 1}. [${h.source}] ${h.name} — ${h.summary} ${h.details}`.trim())
-        .join('\n')}\nOnly use the details above for verified claims. If the user asks about availability, price, dosage for their body, or anything not in this verified block, clearly state that you do not have verified information.`
+        .join('\n')}\nOnly use the details above for verified claims, and attribute them ("GlobalHealth currently shows…"). If the user asks about availability, price, dosage for their body, or anything not in this verified block, clearly state that you do not have verified information.`
     : 'No verified GlobalHealth clinical record was matched for this query. If asked for specific medicine availability, price, doctor/hospital availability or personal results, explicitly state that you do not have verified information instead of inventing it.';
 
   return { hits: limited, context };

@@ -14,6 +14,10 @@ export interface RuntimeConfig {
   corsOrigins: string[];
   appUrl: string;
   geminiApiKey: string;
+  /** AI engine selection (spec: model independence). Only 'gemini' is
+   * implemented today; AI_MODEL overrides the model id. */
+  aiProvider: 'gemini';
+  aiModel: string;
   medAuthRegistryUrl: string;
   medAuthRegistrySecret: string;
   prescriptionSigningSecret: string;
@@ -48,6 +52,8 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
   const appUrl = (env.APP_URL || '').trim();
 
   const geminiApiKey = (env.GEMINI_API_KEY || '').trim();
+  const aiProvider = ((env.AI_PROVIDER || 'gemini').trim().toLowerCase() || 'gemini') as 'gemini';
+  const aiModel = (env.AI_MODEL || 'gemini-2.5-flash').trim() || 'gemini-2.5-flash';
   const medAuthRegistryUrl = (env.MEDAUTH_REGISTRY_URL || '').trim();
   const medAuthRegistrySecret = (env.MEDAUTH_REGISTRY_SECRET || '').trim();
   const prescriptionSigningSecret = (env.PRESCRIPTION_SIGNING_SECRET || '').trim();
@@ -84,6 +90,8 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
     corsOrigins,
     appUrl,
     geminiApiKey,
+    aiProvider,
+    aiModel,
     medAuthRegistryUrl,
     medAuthRegistrySecret,
     prescriptionSigningSecret,

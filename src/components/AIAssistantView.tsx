@@ -16,6 +16,9 @@ interface AIAssistantViewProps {
    * guest session conversation survives page navigation.
    */
   active?: boolean;
+  /** The public section the user was on when they opened the assistant —
+   * used only as safe page context ("this section" resolution). */
+  originTab?: string;
 }
 
 /**
@@ -30,6 +33,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
   onNavigate = () => {},
   onLogout = async () => {},
   active = true,
+  originTab = 'home',
 }) => (
   <AIWorkspace
     currentLanguage={currentLanguage}
@@ -38,5 +42,6 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
     onNavigate={onNavigate}
     onLogout={onLogout}
     active={active}
+    originTab={originTab}
   />
 );

@@ -170,3 +170,38 @@ requires professional review.
 against a live server. It creates/verifies/logs in two accounts and verifies
 conversation creation, 5-message persistence, refresh restoration, saved
 filtering, logout invalidation, and cross-account isolation.
+
+## 9. Answer generation & authorized personal context
+
+`POST /api/ai-assistant` is optional-auth and follows one non-negotiable rule:
+**the model's private context is decided by the server session, never by the
+browser.**
+
+- **Guests (no valid session):** the prompt receives zero private context and
+  the system instruction forbids accessing or implying access to any private
+  records, appointments, saved items, messages, or account data. Personal
+  questions get a sign-in explanation plus general educational help.
+- **Signed-in users (valid session token):** the server loads the caller's own
+  record (the same owner-only data already served by `/api/me/ehr`,
+  `/api/me/health-records`, `/api/me/appointments`) and injects a sanitized,
+  hard-capped `AUTHORIZED RECORD SUMMARY` block
+  (`src/core/ai/aiUserContext.ts`) into the system instruction. Each use is
+  recorded in the caller's own audit history
+  (`AI_ASSISTANT_RECORD_CONTEXT`).
+- The client MAY additionally send `userContext.personalHealthSnapshot` — a
+  compact summary of dashboard data already displayed to that user. The server
+  treats it as self-reported (labelled "not verified" in the prompt), bounds
+  and sanitizes it, and drops it entirely for guests.
+- Client-declared identity fields (`displayName`, `mrn`) are no longer used
+  for personalization; identity comes from the session only.
+- Urgent-symptom safety screening, rate limiting, verified-knowledge retrieval
+  (medicines/diseases/tests), and the educational-only framing rules are
+  unchanged and apply to every caller.
+
+## 10. Knowledge layer & model provider
+
+The assistant's knowledge architecture (website knowledge records, alias
+expansion, live directory retrieval with strict stock truthfulness, policy
+fragments, content status/versioning, and the model-provider abstraction) is
+documented in **`docs/ai-knowledge-architecture.md`**. Configuration knobs:
+`AI_PROVIDER` (default `gemini`) and `AI_MODEL` (default `gemini-2.5-flash`).
