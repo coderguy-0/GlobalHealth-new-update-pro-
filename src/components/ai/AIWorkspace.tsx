@@ -71,6 +71,11 @@ function toErrorKind(err: unknown): { kind: AIErrorKind; message: string } {
  *    every request — the client never sends a userId.
  *  - Chat content is never an EHR: nothing is transferred into medical
  *    records unless the user explicitly saves it.
+ *  - Personal questions: guests get a sign-in invitation and strictly general
+ *    help. Signed-in users' questions are answered by the model using the
+ *    SERVER-side authorized record summary (built from the validated session)
+ *    plus this user's own self-reported dashboard snapshot. No other
+ *    account's data is ever reachable.
  */
 export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initialPrompt, onBack, onNavigate, onLogout, active = true }) => {
   const { user, requireAuth } = useAuth();
@@ -216,7 +221,60 @@ export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initi
   }, [isSignedIn]);
 
   /* ----------------------------------------------------------------
-   * EHR-grounded replies — the signed-in account owner's own record only.
+   * Personal health snapshot (signed-in only).
+   * A compact summary of the dashboard data this user already sees in
+   * their own browser, sent with each question so the model can reason
+   * about vitals/medications/labs/appointments. The server treats it as
+   * self-reported context, sanitizes and bounds it, and drops it
+   * entirely for guests. Guests instead get the friendly sign-in
+   * invitation from buildEhrReply below.
+   * -------------------------------------------------------------- */
+  const personalHealthSnapshot = useMemo(() => {
+    if (!isSignedIn) return '';
+    const lines: string[] = [];
+    const v = activePatient?.recentVitals;
+    if (v && (v.hr > 0 || (v.bp && !v.bp.startsWith('—')))) {
+      lines.push(`Latest vitals: BP ${v.bp}, heart rate ${v.hr} BPM, SpO2 ${v.spo2}%${v.temp ? `, temperature ${v.temp}°F` : ''}.`);
+    }
+    if (wellness?.weightKg > 0 || wellness?.heightCm > 0) {
+      lines.push(
+        `Body metrics: ${wellness.weightKg} kg, ${wellness.heightCm} cm${wellness?.targetWeightKg > 0 ? ` (target weight ${wellness.targetWeightKg} kg)` : ''}.`
+      );
+    }
+    const meds: string[] = activePatient?.currentMedications || [];
+    if (meds.length) lines.push(`Current medications: ${meds.slice(0, 8).join(', ')}.`);
+    if (medicationReminders.length) {
+      lines.push(
+        `Dosing reminders: ${medicationReminders
+          .slice(0, 5)
+          .map((r) => `${r.name} at ${r.time}${r.takenToday ? ' (taken today)' : ''}`)
+          .join('; ')}.`
+      );
+    }
+    const labs = (activePatient?.labReports || []).slice(0, 5);
+    if (labs.length) {
+      lines.push(
+        `Recent lab results: ${labs
+          .map((l) => `${l.testName}: ${l.resultValue} ${l.unit} (ref ${l.referenceRange})${l.status ? `, flagged ${l.status}` : ''}`)
+          .join('; ')}.`
+      );
+    }
+    if (appointments.length) {
+      lines.push(
+        `Appointments: ${appointments
+          .slice(0, 5)
+          .map((a) => `${a.doctorName || 'Doctor'} on ${a.date} at ${a.time} (${a.status})`)
+          .join('; ')}.`
+      );
+    }
+    return lines.join('\n');
+  }, [isSignedIn, activePatient, wellness, medicationReminders, appointments]);
+
+  /* ----------------------------------------------------------------
+   * Guest personal-data replies — a friendly sign-in invitation.
+   * Signed-in personal questions are NOT intercepted here anymore:
+   * they are answered by the model, grounded in the server-side
+   * authorized record context plus the snapshot above.
    * -------------------------------------------------------------- */
   const buildEhrReply = useCallback(
     (text: string): { text: string; sourceContext: string } | null => {
@@ -375,7 +433,7 @@ export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initi
           prompt,
           currentLanguage,
           isSignedIn
-            ? { displayName: user!.fullName, mrn: activePatient.mrn, authenticated: true, systemContext, conversationHistory }
+            ? { displayName: user!.fullName, mrn: activePatient.mrn, authenticated: true, systemContext, conversationHistory, personalHealthSnapshot }
             : { authenticated: false, systemContext, conversationHistory },
           controller.signal
         );
@@ -389,7 +447,7 @@ export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initi
         abortRef.current = null;
       }
     },
-    [currentLanguage, isSignedIn, user, activePatient.mrn]
+    [currentLanguage, isSignedIn, user, activePatient.mrn, personalHealthSnapshot]
   );
 
   const handleSend = useCallback(
@@ -469,8 +527,10 @@ export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initi
         return;
       }
 
-      // EHR-grounded local reply (own record for signed-in; invite for guests).
-      const ehr = buildEhrReply(text);
+      // Guest personal-data questions get a friendly sign-in invitation.
+      // Signed-in questions go to the model, grounded in the server-side
+      // authorized record context (never keyword templates).
+      const ehr = isSignedIn ? null : buildEhrReply(text);
       if (ehr) {
         const bot: AIMessage = {
           id: `bot-${Date.now()}`,

@@ -30,7 +30,7 @@ central boundary is:
 | Pharmacy marketplace | `/api/pharmacy-marketplace/*` | public availability/orders |
 | Pharmacy partner | `/api/pharmacy-partner/*` | `requireMarketPartner` (ownership) |
 | Hospital | `/api/hospital-registry/*`, `/api/hospital-portal/*` | public + `requireHospitalToken` |
-| AI | `/api/ai/conversations*`, `/api/ai-assistant` | authenticated conversations; AI assistant rate-limited |
+| AI | `/api/ai/conversations*`, `/api/ai-assistant` | authenticated conversations; AI assistant rate-limited, optional auth (private record context injected server-side for the signed-in caller only) |
 
 ## Authentication
 

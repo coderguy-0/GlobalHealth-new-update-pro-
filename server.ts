@@ -12,6 +12,7 @@ import { PHARMACY_PRODUCTS, VERIFIED_PHARMACY_PARTNERS } from './src/data/pharma
 import { INITIAL_HOSPITALS, INITIAL_DEPARTMENTS, INITIAL_PORTAL_DOCTORS, INITIAL_BLOOD_BANK } from './src/data/hospitalInitialData';
 import { detectSafetyRisk } from './src/core/ai/aiSafety';
 import { retrieveVerifiedKnowledge } from './src/core/ai/aiKnowledge';
+import { buildAuthorizedRecordSummary } from './src/core/ai/aiUserContext';
 import { loadRuntimeConfig } from './src/server/config';
 import { createLogger } from './src/server/logger';
 import { apiError } from './src/server/errors';
@@ -8084,37 +8085,67 @@ Request ID: ${requestId}`,
 
       const langInstruction = language && language !== 'English' ? ` Please respond in ${language}.` : '';
 
-      // Personalization is derived ONLY from the calling client's own declared
-      // identity (their name / MRN). Values are sanitized (no line breaks,
-      // bounded length) so they cannot inject instructions, and nothing from
-      // any other account is ever included.
+      // Client-supplied fields are NEVER authoritative here. Identity and
+      // private data are resolved from the validated session token only; the
+      // remaining client fields are sanitized, bounded enhancements.
       const cleanCtx = (v: unknown, max = 80): string =>
         String(v ?? '').replace(/[\r\n\t]/g, ' ').replace(/[<>{}]/g, '').trim().slice(0, max);
-      const ctxName = cleanCtx((userContext as any)?.displayName);
-      const ctxMrn = cleanCtx((userContext as any)?.mrn, 24);
       // Non-authoritative context from the client's understanding pipeline
       // (intent, answer mode, transparency guidance). Bounded and sanitized so
       // it cannot inject privileged instructions or leak private data.
       const ctxSystem = cleanCtx((userContext as any)?.systemContext, 5000) || '';
       const ctxHistory = cleanCtx((userContext as any)?.conversationHistory, 8000) || '';
+      // Self-reported dashboard snapshot (signed-in callers only): the caller's
+      // own browser may share the same dashboard data that is already displayed
+      // to them (vitals, medications, labs, appointments). It is treated as
+      // user-provided, never as verified record data, and is DROPPED entirely
+      // for guests.
+      const ctxSnapshot = cleanCtx((userContext as any)?.personalHealthSnapshot, 2500) || '';
 
-      const identityInstruction =
-        (userContext as any)?.authenticated && ctxName
-          ? ` You are chatting with ${ctxName}, the signed-in GlobalHealth account owner${ctxMrn ? ` of health record ${ctxMrn}` : ''}. Address them by their first name where natural and tailor general guidance to them as an individual. You have access to NO clinical database: if they ask about their personal labs, vitals, medications or appointments that were not included in this message, say you cannot see that detail here rather than inventing it. You must never reference, assume or fabricate any other person's health data.`
-          : ` The visitor is not signed in. Keep answers strictly general and educational. If they ask about "my" personal records, results or prescriptions, explain that personal EHR answers require signing in to their own account, and that you cannot see anyone's private health data.`;
+      // Identity + private context come from the server session ONLY. A guest
+      // (no valid session) gets an assistant that sees zero private data.
+      const authUser = authenticate(req);
 
-      const systemInstruction = `You are GlobalHealth's AI Health & Wellness Assistant. You are an AI INFORMATION ASSISTANT — a website helper and educational health-information guide, NOT a doctor and NOT a licensed medical professional.
-You provide compassionate, evidence-based, easy-to-understand EDUCATIONAL information about health conditions, symptoms, wellness, nutrition, medical tests, medications, and general fitness.
-${identityInstruction}
+      let identityInstruction: string;
+      if (authUser) {
+        const own = seedPrivateData(authUser.id, authUser.fullName);
+        const authorizedContext = buildAuthorizedRecordSummary(
+          { id: authUser.id, fullName: authUser.fullName },
+          own
+        );
+        const firstName = cleanCtx(authUser.firstName || authUser.fullName.split(' ')[0], 40);
+        // Operational audit trail (same log used by requireAuth for
+        // PROTECTED_RESOURCE_ACCESS), so authorized context use is traceable
+        // server-side on every question.
+        AUDIT_LOGS.push({
+          id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          userId: authUser.id,
+          event: 'AI_ASSISTANT_RECORD_CONTEXT',
+          timestamp: new Date().toISOString(),
+          ipAddress: req.ip || '127.0.0.1',
+          status: 'success',
+          details: 'Authorized own-record summary provided to the AI assistant for this question'
+        });
+        identityInstruction = ` You are chatting with ${firstName}, the signed-in owner of this GlobalHealth account. Answer their personal questions using ONLY the authorized context below${ctxSnapshot ? ' and the self-reported snapshot' : ''}; if the answer needs details not included there, say you do not have that detail rather than inventing it. You must never reference, assume or fabricate any other person's health data.\n${authorizedContext}${ctxSnapshot ? `\nSELF-REPORTED DASHBOARD SNAPSHOT (from the user's own session; may be incomplete — treat as user-provided, not verified): ${ctxSnapshot}` : ''}`;
+      } else {
+        identityInstruction = ` The visitor is not signed in. You have NO access to anyone's private health records, appointments, saved items, messages or account information — never access, reference or imply otherwise. If they ask about personal information, explain that personal answers require signing in to their own GlobalHealth account, and offer general educational help instead.`;
+      }
+
+      const systemInstruction = `You are the GlobalHealth website AI assistant — a website helper and educational health-information guide, NOT a doctor and NOT a licensed medical professional.
+PURPOSE: help users navigate GlobalHealth, understand its features, and get careful, educational health information.
+KNOWLEDGE AREAS: diseases, medicines, laboratory tests, doctors, hospitals, the medical map, health news, nutrition, recipes, wellness & fitness, health tools & calculators, appointments, pharmacy information, and website navigation.
+WEBSITE GUIDANCE:
+- Explain GlobalHealth features clearly and help users find the correct section.
+- Point only to real GlobalHealth sections: Explore Diseases, Medicine Information, Lab Tests / Medical Tests, Find a Doctor, Hospitals, Medical Map, Health News, Nutrition & Recipes, Wellness & Fitness, Health Tools & Calculators, Appointments, Verified Pharmacy Partners, Community, AI Meal Planner. Never invent pages, doctors, hospitals, medicines, prices, availability or certifications.
 SAFETY RULES (never violate):
 - Never claim to be a doctor, nurse, clinician or licensed professional. Never say "I am your doctor" or imply medical credentials.
 - NEVER diagnose. Never say "you definitely have X" or "this is X". Use educational framing: "This can be associated with...", "Generally...", "A healthcare professional can determine...".
 - Never tell a user they do not need a doctor, and never instruct starting, stopping, or changing any medication or dose. Medications are described educationally only.
 - If the user describes symptoms that could be urgent (chest pain, difficulty breathing, severe bleeding, stroke signs, seizures, loss of consciousness, suicidal thoughts, severe allergic reaction, poisoning/overdose), clearly advise seeking urgent/emergency care immediately. Never reassure falsely.
 - Never invent statistics, percentages, or fake confidence values. If unsure, say so plainly.
-- GlobalHealth website assistance: you may point users to real GlobalHealth sections (Explore Diseases, View Medicine Information, Explore Lab Tests, Find a Doctor, Open Medical Map, Explore Verified Pharmacy Partners, Open Community, Wellness & Fitness, Health Tools/Calculators, Nutrition & Recipes). Never invent pages that do not exist.
+- Do not expose another user's private information; other accounts' data does not exist for you.
 - Always end with a short note that this is educational information and not a substitute for professional medical advice.
-Format responses cleanly with short markdown headings, brief paragraphs, and bullet points. Avoid walls of text.${langInstruction}${
+STYLE: simple, friendly, professional. Short sentences, short markdown headings, brief paragraphs and bullet points. Plain, understandable language. Avoid walls of text.${langInstruction}${identityInstruction}${
         ctxSystem ? `\nPLATFORM CONTEXT GUIDANCE (non-authoritative, from GlobalHealth's understanding layer): ${ctxSystem}` : ''
       }${knowledge.context}${ctxHistory ? `\nCURRENT CONVERSATION HISTORY (recent, for continuity and reference resolution):\n${ctxHistory}\nUse this only to understand the user's current thread. Never repeat earlier answers verbatim.` : ''}`;
 

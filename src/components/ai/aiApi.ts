@@ -253,6 +253,11 @@ export interface AssistantRequestContext {
    * references ("the second one"), maintain topic continuity, and avoid
    * repeating prior answers. Bounded and sanitized server-side. */
   conversationHistory?: string;
+  /** Signed-in users ONLY: a compact snapshot of the dashboard data this user
+   * already sees in their own browser (vitals, medications, labs,
+   * appointments). The server treats it as self-reported, non-authoritative
+   * context and drops it entirely for guests. */
+  personalHealthSnapshot?: string;
 }
 
 /** Calls the Gemini-backed assistant endpoint with the signed-in caller's own
