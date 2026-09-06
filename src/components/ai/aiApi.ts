@@ -324,4 +324,24 @@ export async function requestAssistantResponse(
   }
 }
 
+export type AiFeedbackRating = 'helpful' | 'not_helpful';
+export type AiFeedbackCategory = 'INCORRECT' | 'OUTDATED' | 'UNSAFE' | 'MISSING' | 'WRONG_NAVIGATION' | 'WRONG_ENTITY' | 'OTHER';
+
+/** Sends a privacy-first feedback signal: rating + optional category/section
+ * only. The question and answer text are NEVER sent or stored (spec PART 93). */
+export async function sendAiFeedback(
+  rating: AiFeedbackRating,
+  category?: AiFeedbackCategory,
+  route?: string
+): Promise<void> {
+  try {
+    await apiFetch('/api/ai/feedback', {
+      method: 'POST',
+      body: { rating, category, route },
+    });
+  } catch {
+    // Feedback is best-effort; it must never disturb the conversation.
+  }
+}
+
 export { AuthError };

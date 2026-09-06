@@ -22,6 +22,7 @@ export interface DirectoryDoctor {
   id?: string;
   name: string;
   specialty?: string;
+  hospitalId?: string;
   subspecialty?: string;
   departmentName?: string;
   experienceYears?: number;
@@ -52,10 +53,17 @@ export interface DirectoryProduct {
   pharmacyPartnerName?: string;
 }
 
+export interface DirectoryDepartment {
+  hospitalId?: string;
+  name?: string;
+}
+
 export interface DirectoryCatalog {
   doctors?: DirectoryDoctor[];
   hospitals?: DirectoryHospital[];
   pharmacyProducts?: DirectoryProduct[];
+  /** Hospital departments — enables the HOSPITAL → HAS_DEPARTMENT relation. */
+  departments?: DirectoryDepartment[];
 }
 
 export type DirectoryKind = 'doctor' | 'hospital' | 'pharmacy-product';
@@ -86,9 +94,10 @@ export function stockLabel(availability: unknown): string {
   }
 }
 
-function doctorSnippet(d: DirectoryDoctor): DirectoryHit {
+function doctorSnippet(d: DirectoryDoctor, hospitalName?: string): DirectoryHit {
   const bits = [clean(d.specialty, 80), clean(d.departmentName, 80)].filter(Boolean);
   const details = [
+    hospitalName ? `Affiliated hospital (as listed): ${hospitalName}` : '',
     d.experienceYears ? `Experience: ${d.experienceYears} years` : '',
     d.consultationFee ? `Consultation fee (as listed): ${d.consultationFee}` : '',
     d.opdSchedule ? `OPD schedule (as listed): ${clean(d.opdSchedule, 80)}` : '',
@@ -105,7 +114,7 @@ function doctorSnippet(d: DirectoryDoctor): DirectoryHit {
   };
 }
 
-function hospitalSnippet(h: DirectoryHospital): DirectoryHit {
+function hospitalSnippet(h: DirectoryHospital, departmentNames?: string[]): DirectoryHit {
   const bits = [clean(h.hospitalType, 60), clean(h.city, 60)].filter(Boolean);
   return {
     kind: 'hospital',
@@ -113,7 +122,12 @@ function hospitalSnippet(h: DirectoryHospital): DirectoryHit {
     name: clean(h.name, 120),
     source: 'GlobalHealth Hospital Directory (as listed)',
     summary: bits.length ? bits.join(' · ') : 'GlobalHealth-listed hospital',
-    details: h.emergencyPhone ? `Listed emergency phone: ${clean(h.emergencyPhone, 24)}` : '',
+    details: [
+      h.emergencyPhone ? `Listed emergency phone: ${clean(h.emergencyPhone, 24)}` : '',
+      departmentNames?.length ? `Departments (as listed): ${departmentNames.slice(0, 5).join('; ')}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · '),
   };
 }
 
@@ -209,6 +223,20 @@ export function retrieveDirectoryKnowledge(
   const textLower = expanded.toLowerCase();
   const hits: DirectoryHit[] = [];
 
+  // Relationship lookups (spec PART 19): hospitalId → hospital name, and
+  // hospitalId → department names. Real application links only.
+  const hospitalNameById = new Map<string, string>();
+  for (const h of catalog.hospitals ?? []) {
+    if (h.id) hospitalNameById.set(String(h.id), clean(h.name, 120));
+  }
+  const departmentsByHospital = new Map<string, string[]>();
+  for (const dep of catalog.departments ?? []) {
+    if (!dep.hospitalId || !dep.name) continue;
+    const list = departmentsByHospital.get(String(dep.hospitalId)) ?? [];
+    if (list.length < 8) list.push(clean(dep.name, 60));
+    departmentsByHospital.set(String(dep.hospitalId), list);
+  }
+
   for (const d of catalog.doctors ?? []) {
     if (hits.length >= maxHits) break;
     const specialty = clean(d.specialty, 80);
@@ -219,7 +247,7 @@ export function retrieveDirectoryKnowledge(
       specialty.length > 3 && (textLower.includes(specialty.toLowerCase()) || strongTokenMatch(specialty, textLower));
     if (!nameHit && !specialtyHit) continue;
     if (hits.some((h) => h.name === d.name)) continue;
-    hits.push(doctorSnippet(d));
+    hits.push(doctorSnippet(d, d.hospitalId ? hospitalNameById.get(String(d.hospitalId)) : undefined));
   }
 
   for (const h of catalog.hospitals ?? []) {
@@ -228,7 +256,7 @@ export function retrieveDirectoryKnowledge(
     const cityHit = Boolean(h.city && matches(h.city, textLower) && textLower.includes('hospital'));
     if (!nameHit && !cityHit) continue;
     if (hits.some((x) => x.name === h.name)) continue;
-    hits.push(hospitalSnippet(h));
+    hits.push(hospitalSnippet(h, h.id ? departmentsByHospital.get(String(h.id)) : undefined));
   }
 
   for (const p of catalog.pharmacyProducts ?? []) {

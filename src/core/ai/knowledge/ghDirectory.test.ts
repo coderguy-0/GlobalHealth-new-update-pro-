@@ -9,12 +9,17 @@ const CATALOG: DirectoryCatalog = {
       name: 'Prof. Dr. Vikram Sethi',
       specialty: 'Cardiothoracic & Vascular Surgery',
       departmentName: 'Cardiology & Vascular Institute',
+      hospitalId: 'HSP-IN-DL-000125',
       experienceYears: 24,
       consultationFee: 1800,
     },
   ],
   hospitals: [
     { id: 'HSP-IN-DL-000125', name: 'Apex Institute of Medical Sciences & Research Center', city: 'New Delhi', hospitalType: 'Super Specialty' },
+  ],
+  departments: [
+    { hospitalId: 'HSP-IN-DL-000125', name: 'Cardiology & Vascular Institute' },
+    { hospitalId: 'HSP-IN-DL-000125', name: 'Neurological Sciences Institute' },
   ],
   pharmacyProducts: [
     {
@@ -98,6 +103,19 @@ test('products are found by a distinctive generic word even with packaging text'
   const generics = hits.filter((h) => h.kind === 'pharmacy-product');
   assert.ok(generics.length >= 2, 'both paracetamol products should be found');
   assert.ok(generics.every((h) => h.details.includes('Stock status:')));
+});
+
+test('relations: doctor hit includes affiliated hospital; hospital hit includes departments (PART 19)', () => {
+  const doc = retrieveDirectoryKnowledge('Dr. Vikram Sethi appointment', 3, CATALOG);
+  const docHit = doc.find((h) => h.kind === 'doctor');
+  assert.ok(docHit, 'doctor hit expected');
+  assert.ok(docHit.details.includes('Affiliated hospital (as listed): Apex Institute'), 'doctor → hospital relation');
+
+  const hosp = retrieveDirectoryKnowledge('Apex Institute of Medical Sciences departments', 3, CATALOG);
+  const hospHit = hosp.find((h) => h.kind === 'hospital');
+  assert.ok(hospHit, 'hospital hit expected');
+  assert.ok(hospHit.details.includes('Departments (as listed):'), 'hospital → departments relation');
+  assert.ok(hospHit.details.includes('Cardiology & Vascular Institute'));
 });
 
 test('no matches returns empty array — never fabricated entities', () => {

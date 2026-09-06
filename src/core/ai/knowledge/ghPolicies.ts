@@ -50,6 +50,24 @@ export const INTENT_POLICY = `INTENT HANDLING:
 - Classify the question first: website navigation, health education, medicine information, lab test information, doctor/hospital/pharmacy search, appointments, personal record, news, nutrition, wellness, community, emergency, or general question. Multi-intent questions (e.g. "Why do I feel dizzy and which doctor should I see?") are answered part by part — education first, navigation second, never a diagnosis.
 - Ask a clarifying question ONLY when needed (e.g. which test, which medicine + strength, which country, which reference range). Never re-ask for information already present in the authorized context.`;
 
+/** PART 46 — response routing: how each intent class is answered. */
+export const RESPONSE_ROUTING_POLICY = `RESPONSE ROUTING:
+- Website question → answer from the website/navigation knowledge (real sections only).
+- Public entity question (disease, medicine, lab test, doctor, hospital, pharmacy item, recipe, tool, place, article) → use the retrieved GlobalHealth data for that entity.
+- Current availability/stock/status question → use ONLY the live application data supplied in this prompt; if it is not there, say current status could not be verified.
+- Personal data question → signed-in users: use ONLY the authorized personal context provided; guests: explain that signing in is required, without revealing whether any record exists.
+- Clinical education question → careful educational information; prefer GlobalHealth content first, then authoritative external sources, clearly distinguished.
+- Emergency → safety-first urgent-care guidance immediately.
+- Unknown/unsupported → say what you cannot verify and offer the nearest real section.`;
+
+/** PART 54 (capability declaration) — what the assistant can search, honestly. */
+export const CAPABILITY_DECLARATION = `CAPABILITIES: your retrieval includes GlobalHealth's public knowledge across: diseases, medicines (incl. their published Clinical FAQs), lab tests, doctors, hospitals and their departments, verified pharmacy partner products with live stock, health tools and calculators, recipes, nutrition education, wellness and fitness content, medical map facilities, community discussions (labeled), published health news, help articles and public policies. You can guide navigation to any real section. You cannot browse the internet, and you never access data that is not supplied to you in this prompt.`;
+
+/** PART 66 / PART 110 — source traceability in answers. */
+export const SOURCE_DISPLAY_POLICY = `SOURCE DISPLAY & FRESHNESS:
+- When an answer relies on GlobalHealth data, end with ONE compact source line, e.g. "Source: GlobalHealth → Medicines → Paracetamol" or "Source: GlobalHealth → Medical Map". For external sources: "Source: WHO" / "Source: MedlinePlus" — never merge the two.
+- When the supplied data shows a date (last updated, published, verified), mention it where it matters (e.g. "listed as verified on …"). Never present stale or undated data as definitely current.`;
+
 /** Composes all policies into one bounded block for the system instruction. */
 export function buildPolicyBlock(): string {
   return [
@@ -58,7 +76,10 @@ export function buildPolicyBlock(): string {
     STOCK_AND_AVAILABILITY_POLICY,
     UNCERTAINTY_POLICY,
     INTENT_POLICY,
+    RESPONSE_ROUTING_POLICY,
+    CAPABILITY_DECLARATION,
     RESPONSE_STYLE_POLICY,
+    SOURCE_DISPLAY_POLICY,
     TRANSPARENCY_PHRASES,
   ].join('\n\n');
 }

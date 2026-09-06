@@ -37,6 +37,7 @@ import {
 import { MEDICAL_MAP_FACILITIES } from '../../../data/medicalMapData';
 import { FORUM_POSTS } from '../../../data/forumPosts';
 import { INITIAL_NEWS_ARTICLES } from '../../../data/newsManagementData';
+import { ALL_400_MEDICINES } from '../../../data/medicines/index';
 
 /** Public document schema (spec §61/§62/§63, unified). */
 export interface PublicDoc {
@@ -69,7 +70,8 @@ export type PublicEntityType =
   | 'COMMUNITY_POST'
   | 'NEWS'
   | 'HELP_ARTICLE'
-  | 'POLICY';
+  | 'POLICY'
+  | 'FAQ';
 
 /** The access filter every document must pass (spec §64-65 — fail closed). */
 export function indexablePublicDoc(doc: {
@@ -427,7 +429,33 @@ export const NEWS_DOCS: PublicDoc[] = INITIAL_NEWS_ARTICLES.filter(
 ).filter((d): d is PublicDoc => d !== null);
 
 /* ------------------------------------------------------------------ *
- * 8. HELP / FAQ / POLICY — how to use the site + real public policies
+ * 8. FAQ — the REAL "Clinical FAQs" published on medicine pages
+ *    (spec PART 32). Every question/answer pair below is approved public
+ *    content from the medicines library — never generated.
+ * ------------------------------------------------------------------ */
+export const MEDICINE_FAQ_DOCS: PublicDoc[] = ALL_400_MEDICINES.flatMap((m: any) =>
+  (Array.isArray(m.faqs) ? m.faqs : []).slice(0, 6).map((f: any, i: number) =>
+    makeDoc({
+      documentId: `faq:medicine:${clean(m.id ?? m.name, 40)}:${i}`,
+      entityType: 'FAQ',
+      title: clean(f.question, 160),
+      summary: clean(f.answer, 320),
+      details: `From the ${clean(m.name, 80)} page (Clinical FAQs section). Answers medicine-specific questions educationally and never replaces professional advice.`,
+      keywords: [
+        'faq',
+        'question',
+        clean(m.name, 40).toLowerCase(),
+        clean(m.genericName, 40).toLowerCase(),
+      ],
+      route: 'medicines',
+      sourceTitle: `GlobalHealth → Medicines → ${clean(m.name, 60)}`,
+      lastUpdated: INDEXED_AT,
+    })
+  )
+).filter((d): d is PublicDoc => d !== null);
+
+/* ------------------------------------------------------------------ *
+ * 9. HELP / FAQ / POLICY — how to use the site + real public policies
  *    (spec §25, §26, §47, §48, §49)
  * ------------------------------------------------------------------ */
 export const HELP_POLICY_DOCS: PublicDoc[] = [
@@ -463,6 +491,17 @@ export const HELP_POLICY_DOCS: PublicDoc[] = [
     keywords: ['buy', 'medicine', 'pharmacy', 'stock', 'price', 'order', 'verified'],
     route: 'medicines',
     sourceTitle: 'GlobalHealth → Medicines / Verified Pharmacy Partners',
+    lastUpdated: INDEXED_AT,
+  }),
+  makeDoc({
+    documentId: 'help:disease-pages',
+    entityType: 'HELP_ARTICLE',
+    title: 'What a disease page on GlobalHealth contains',
+    summary: 'Each disease page brings together the overview, symptoms and warning signs, causes and risk factors, diagnosis and tests, treatment categories, prevention, complications, and a dynamic Common Questions (FAQ) section generated from that condition\'s own record — for example whether it is contagious, its usual recovery time, and vaccine availability where applicable.',
+    details: 'Related sections: Diseases. Related: Find a Doctor for the managing specialty.',
+    keywords: ['disease', 'page', 'faq', 'questions', 'what is included', 'overview'],
+    route: 'diseases',
+    sourceTitle: 'GlobalHealth → Diseases',
     lastUpdated: INDEXED_AT,
   }),
   makeDoc({
@@ -560,6 +599,7 @@ export function allPublicDocs(): PublicDoc[] {
     ...MAP_LOCATION_DOCS,
     ...COMMUNITY_DOCS,
     ...NEWS_DOCS,
+    ...MEDICINE_FAQ_DOCS,
     ...HELP_POLICY_DOCS,
   ];
 }
@@ -586,6 +626,7 @@ export function publicIndexStats(): PublicIndexStats {
       communityPosts: FORUM_POSTS.length,
       newsArticles: INITIAL_NEWS_ARTICLES.length,
       wellnessModules: WELLNESS_MODULES.length,
+      medicineFaqs: MEDICINE_FAQ_DOCS.length,
     },
     excluded: {
       // Fail-closed: only PUBLISHED news is indexed (spec §21, §65).

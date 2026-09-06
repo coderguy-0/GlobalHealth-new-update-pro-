@@ -22,8 +22,10 @@ import {
   MAP_LOCATION_DOCS,
   COMMUNITY_DOCS,
   NEWS_DOCS,
+  MEDICINE_FAQ_DOCS,
   HELP_POLICY_DOCS,
 } from '../src/core/ai/knowledge/ghPublicIndex.ts';
+import { PUBLIC_API_INVENTORY, apiInventoryStats } from '../src/core/ai/knowledge/ghPublicApis.ts';
 import { retrieveVerifiedKnowledge } from '../src/core/ai/aiKnowledge.ts';
 import { ALL_400_MEDICINES } from '../src/data/medicines/index.ts';
 import { ALL_DISEASES } from '../src/data/diseases/diseaseIndex.ts';
@@ -65,24 +67,41 @@ const typeRows = [
   ['MAP_LOCATION', MAP_LOCATION_DOCS.length, MEDICAL_MAP_FACILITIES.length],
   ['COMMUNITY_POST (labeled COMMUNITY CONTENT)', COMMUNITY_DOCS.length, FORUM_POSTS.length],
   ['NEWS (published only)', NEWS_DOCS.length, INITIAL_NEWS_ARTICLES.length],
+  ['FAQ (real Clinical FAQs from medicine pages)', MEDICINE_FAQ_DOCS.length, 1600],
   ['HELP_ARTICLE / POLICY', HELP_POLICY_DOCS.length, null],
 ];
+let coverageNum = 0;
+let coverageDen = 0;
 for (const [label, indexed, total] of typeRows) {
-  console.log(`   ${label.padEnd(46)} indexed: ${String(indexed).padStart(4)}${total != null ? `   / ${total} in dataset` : ''}`);
+  const pct = total != null ? Math.round((indexed / total) * 100) : null;
+  if (pct != null) { coverageNum += indexed; coverageDen += total; }
+  console.log(`   ${label.padEnd(46)} indexed: ${String(indexed).padStart(4)}${total != null ? `   / ${total}  (${pct}%)` : ''}`);
 }
 
-// ---- 3. Clinical + directory layers -----------------------------------------
-console.log('\n3. VERIFIED CLINICAL LIBRARIES (indexed by aiKnowledge.ts)');
+// ---- API inventory ----------------------------------------------------------
+const apis = apiInventoryStats();
+console.log('\n3. PUBLIC API INVENTORY (classified from server.ts; test-verified paths)');
+console.log(`   Inventoried endpoints: ${apis.total}`);
+for (const [access, count] of Object.entries(apis.byAccess)) {
+  console.log(`     ${access.padEnd(18)} ${count}`);
+}
+console.log(`   Public-scope (indexed via canonical data): ${apis.indexedViaCanonicalData}`);
+console.log(`   Explicitly excluded (private/role/internal): ${apis.excluded}`);
+
+// ---- 4. Clinical + directory layers -----------------------------------------
+console.log('\n4. VERIFIED CLINICAL LIBRARIES (indexed by aiKnowledge.ts)');
 console.log(`   Medicines:   ${ALL_400_MEDICINES.length} (canonical records, public fields)`);
 console.log(`   Diseases:    ${ALL_DISEASES.length}`);
 console.log(`   Lab tests:   ${ALL_1000_MEDICAL_TESTS.length}`);
-console.log('\n4. LIVE PUBLIC DIRECTORIES (indexed by ghDirectory.ts)');
+console.log('\n   Live relationships: doctor→affiliated hospital, hospital→departments,');
+console.log('   disease→related specialty / severity / contagiousness / vaccine facts.');
+console.log('\n5. LIVE PUBLIC DIRECTORIES (indexed by ghDirectory.ts)');
 console.log(`   Doctors (public profiles):        ${INITIAL_PORTAL_DOCTORS.length}`);
 console.log(`   Hospitals (public profiles):      ${INITIAL_HOSPITALS.length}`);
 console.log(`   Pharmacy products (public stock): ${PHARMACY_PRODUCTS.length}`);
 
-// ---- 4. Exclusions -----------------------------------------------------------
-console.log('\n5. EXCLUDED FROM THE PUBLIC INDEX (fail-closed controls)');
+// ---- 6. Exclusions -----------------------------------------------------------
+console.log('\n6. EXCLUDED FROM THE PUBLIC INDEX (fail-closed controls)');
 console.log(`   News articles not PUBLISHED (drafts/review): ${stats.excluded.newsNotPublished}`);
 console.log('   Authenticated personal tabs (dashboard, appointments, privacy, my-history): excluded');
 console.log('   Role portals (doctor, hospital, pharmacy, medauth, news-admin/management/authority,');
@@ -90,10 +109,18 @@ console.log('     doctor-console, doctor-consent): excluded — contain private/
 console.log('   Private user records, EHR, messages, notifications, saved content: never indexed');
 console.log('   (private fields cannot leak by construction — adapters use explicit field whitelists)');
 
-// ---- 5. Retrieval sanity ------------------------------------------------------
+// ---- 7. Retrieval sanity ------------------------------------------------------
 const probe = retrieveVerifiedKnowledge('heart attack', 3);
-console.log('\n6. RETRIEVAL SANITY PROBE');
+console.log('\n7. RETRIEVAL SANITY PROBE');
 console.log(`   "heart attack" → ${probe.hits.map((h) => `${h.kind}: ${h.name}`).join('; ') || 'NO HITS'}`);
+
+// ---- 8. Coverage score --------------------------------------------------------
+const routeCoverage = Math.round((rs.publicRoutes / rs.totalRoutes) * 100);
+const contentCoverage = Math.round((coverageNum / coverageDen) * 100);
+console.log('\n8. PUBLIC KNOWLEDGE COVERAGE SCORE');
+console.log(`   Route coverage (public / discovered):        ${rs.publicRoutes}/${rs.totalRoutes} = ${routeCoverage}% (rest excluded with reasons)`);
+console.log(`   Entity/document coverage (typed datasets):   ${coverageNum}/${coverageDen} = ${contentCoverage}%`);
+console.log(`   Total records indexed across all layers:     ${stats.totalIndexed + ALL_400_MEDICINES.length + ALL_DISEASES.length + ALL_1000_MEDICAL_TESTS.length + INITIAL_PORTAL_DOCTORS.length + INITIAL_HOSPITALS.length + PHARMACY_PRODUCTS.length}`);
 
 console.log('\n================================================================');
 console.log('PUBLIC KNOWLEDGE = INDEXED. PRIVATE KNOWLEDGE = NEVER.');

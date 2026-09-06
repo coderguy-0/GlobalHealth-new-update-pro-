@@ -175,3 +175,36 @@ assistant resolve "this page / this section" honestly.
   draft news is never indexed, unknown classifications never pass the gate,
   protected routes are never indexable, and unmatched queries produce empty
   context (never fabricated content).
+
+## 8. Master-spec additions (final iteration)
+
+- **Relationship graph**: doctor → affiliated hospital and hospital →
+  departments (via `hospitalId` links passed through `ghDirectory`); disease →
+  related specialty / severity / contagiousness / vaccine facts and medicine →
+  listed side effects + FAQ count (via `aiKnowledge` snippet enrichment). All
+  values verbatim from the datasets — never inferred.
+- **FAQ knowledge**: the REAL "Clinical FAQs" published on all 400 medicine
+  pages are indexed as 1,600 retrievable FAQ documents (`MEDICINE_FAQ_DOCS`).
+  The diseases FAQ (derived at render time from each record) is documented via
+  a help article rather than duplicated (dedupe rule).
+- **Public API inventory** (`ghPublicApis.ts`): 25 endpoint groups classified
+  PUBLIC / AUTHENTICATED / CONSENT_REQUIRED / DOCTOR_ONLY / HOSPITAL_ONLY /
+  PHARMACY_ONLY / ADMIN_ONLY with explicit AI-scope decisions. A unit test
+  verifies every inventoried path really exists in server.ts — the inventory
+  cannot drift into fiction.
+- **Response routing & capabilities**: the system prompt now carries an
+  intent→behavior routing table (website / entity / availability / personal /
+  clinical / emergency / unknown), an honest capability declaration, and a
+  source-display + freshness rule (compact "Source:" lines, dates when shown,
+  GlobalHealth vs external never merged).
+- **Feedback loop** (PART 92): thumbs up/down on assistant answers →
+  `POST /api/ai/feedback` (rate-limited, 201) → admin-key-gated review at
+  `GET /api/ai/feedback`. Privacy-first: only rating, optional category and
+  section are stored — question/answer text is never sent or stored.
+- **Outage behavior** (PART 141/142): provider failures now return a clean,
+  retryable `503 AI_PROVIDER_UNAVAILABLE`; the rest of the website is
+  unaffected (the AI is an isolated feature).
+- **Coverage scoring** (PART 148/159): `npm run ai:report` now prints
+  per-type coverage percentages, the API inventory, and a coverage score
+  (typed datasets: 100%; routes: every discovered route either indexed or
+  excluded with a documented reason).

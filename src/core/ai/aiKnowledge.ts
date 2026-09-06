@@ -64,6 +64,13 @@ function medicineSnippet(m: (typeof ALL_400_MEDICINES)[number]): KnowledgeSource
     m.therapeuticGroup ? `Therapeutic group: ${m.therapeuticGroup}` : '',
     m.prescriptionStatus ? `Prescription status: ${m.prescriptionStatus}` : '',
     m.warnings ? `Safety note: ${m.warnings}` : '',
+    // Publicly listed common side effects (spec PART 21) — capped, verbatim.
+    (m as any).commonSideEffects?.length
+      ? `Common side effects (as listed): ${(m as any).commonSideEffects.slice(0, 4).join('; ')}`
+      : (m as any).sideEffects?.length
+        ? `Side effects (as listed): ${(m as any).sideEffects.slice(0, 4).join('; ')}`
+        : '',
+    (m as any).faqs?.length ? `${(m as any).faqs.length} clinical FAQs on its GlobalHealth page` : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -77,8 +84,18 @@ function medicineSnippet(m: (typeof ALL_400_MEDICINES)[number]): KnowledgeSource
 }
 
 function diseaseSnippet(d: (typeof ALL_DISEASES)[number]): KnowledgeSource {
+  // Relationship graph (spec PART 19/20): the specialty that manages this
+  // condition and the key public facts shown on the disease page are placed
+  // FIRST so long symptom lists can never crowd them out of the bounded block.
+  const relations = [
+    (d as any).specialist ? `Related specialty (as listed): ${(d as any).specialist}` : '',
+    (d as any).severity ? `Severity (as listed): ${(d as any).severity}` : '',
+    d.contagious !== undefined && d.contagious !== null ? `Contagious (as listed): ${d.contagious}` : '',
+    typeof (d as any).vaccineAvailable === 'boolean' ? `Vaccine available: ${(d as any).vaccineAvailable ? 'yes' : 'no'}` : '',
+  ].filter(Boolean);
   const details = [
     d.summary || '',
+    ...relations,
     d.symptoms?.length ? `Common associated symptoms: ${d.symptoms.slice(0, 6).join('; ')}` : '',
     d.whenToSeeDoctor ? `When to see a doctor: ${d.whenToSeeDoctor}` : '',
     d.whenToSeekEmergencyCare ? `Emergency signs: ${d.whenToSeekEmergencyCare}` : '',
@@ -90,16 +107,21 @@ function diseaseSnippet(d: (typeof ALL_DISEASES)[number]): KnowledgeSource {
     name: d.title || d.medicalName || d.commonName || 'Condition',
     source: 'GlobalHealth Verified Disease & Condition Library',
     summary: d.summary || '',
-    details,
+    details: String(details).slice(0, 1200),
   };
 }
 
 function testSnippet(t: (typeof ALL_1000_MEDICAL_TESTS)[number]): KnowledgeSource {
+  const cap = (v: unknown, n: number): string => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
   const details = [
     t.purpose || t.description || t.overview || '',
     t.normalRange ? `Reference range: ${t.normalRange}` : '',
     t.preparation ? `Preparation: ${t.preparation}` : '',
     t.sampleType ? `Sample type: ${t.sampleType}` : '',
+    (t as any).timeToResults ? `Turnaround (as listed): ${cap((t as any).timeToResults, 40)}` : '',
+    // Interpretation education from the page (spec PART 22) — capped, verbatim.
+    (t as any).highInterpretation ? `High results (as listed): ${cap((t as any).highInterpretation, 160)}` : '',
+    (t as any).lowInterpretation ? `Low results (as listed): ${cap((t as any).lowInterpretation, 160)}` : '',
     t.whenNotInterpretedAlone?.length ? `Not to be interpreted alone: ${t.whenNotInterpretedAlone.slice(0, 3).join('; ')}` : '',
   ]
     .filter(Boolean)

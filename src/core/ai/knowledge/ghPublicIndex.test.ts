@@ -8,6 +8,7 @@ import {
   MAP_LOCATION_DOCS,
   COMMUNITY_DOCS,
   NEWS_DOCS,
+  MEDICINE_FAQ_DOCS,
   HELP_POLICY_DOCS,
   allPublicDocs,
   publicIndexStats,
@@ -112,6 +113,26 @@ test('help & policy: real help articles + real legal sections are indexed', () =
   assert.ok(terms?.summary.toLowerCase().includes('verified pharmacy partners'));
   const privacy = HELP_POLICY_DOCS.find((d) => d.documentId === 'policy:privacy');
   assert.ok(privacy?.summary.toLowerCase().includes('ai assistant and health data'));
+});
+
+test('FAQ: the real medicine Clinical FAQs are indexed and retrievable (PART 32)', () => {
+  // The medicines library publishes FAQs for all 400 medicines.
+  assert.equal(MEDICINE_FAQ_DOCS.length, 1600);
+  // Every FAQ doc carries its source medicine page.
+  for (const d of MEDICINE_FAQ_DOCS.slice(0, 25)) {
+    assert.equal(d.entityType, 'FAQ');
+    assert.ok(d.sourceTitle.includes('GlobalHealth → Medicines →'));
+  }
+  // A question-like probe finds FAQ content.
+  const hits = searchPublicIndex('What should I do if I experience side effects with my medicine?', 3, 8);
+  assert.ok(hits.some((h) => h.entityType === 'FAQ'), 'FAQ docs should match side-effect questions');
+});
+
+test('help: disease-page contents article exists (FAQ transparency)', () => {
+  const doc = HELP_POLICY_DOCS.find((d) => d.documentId === 'help:disease-pages');
+  assert.ok(doc);
+  assert.ok(doc!.summary.includes('Common Questions'));
+  assert.ok(doc!.summary.includes('vaccine availability'));
 });
 
 test('stats produce the completeness ledger (spec §100)', () => {

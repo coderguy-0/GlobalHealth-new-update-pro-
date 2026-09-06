@@ -30,6 +30,25 @@ test('unmatched queries honestly report that nothing verified was found', () => 
   assert.ok(context.includes('No verified GlobalHealth clinical record was matched'));
 });
 
+test('disease enrichment surfaces the managing specialty and public facts (PART 19/20)', () => {
+  const { hits } = retrieveVerifiedKnowledge('Essential hypertension', 3);
+  const dis = hits.find((h) => h.kind === 'disease');
+  assert.ok(dis, 'disease hit expected');
+  const joined = `${dis.summary} ${dis.details}`;
+  assert.ok(/related specialty/i.test(joined), 'disease snippet should carry the related specialty');
+});
+
+test('lab test enrichment adds real fields and NEVER fabricates absent ones (PART 22, PART 20)', () => {
+  const { hits } = retrieveVerifiedKnowledge('Total Bilirubin', 3);
+  const tst = hits.find((h) => h.kind === 'test');
+  assert.ok(tst, 'test hit expected');
+  // Real enrichment: the turnaround listed on the page appears verbatim.
+  assert.ok(/turnaround/i.test(tst.details), 'turnaround (a real field) should appear');
+  // Anti-fabrication: no test record publishes high/low interpretation fields
+  // today, so the snippet must NOT invent them.
+  assert.ok(!/high results/i.test(tst.details), 'must not invent absent interpretation fields');
+});
+
 test('every hit carries a source label for attribution (spec §47, §92)', () => {
   const { hits } = retrieveVerifiedKnowledge('paracetamol', 3);
   for (const h of hits) {

@@ -8042,6 +8042,64 @@ Request ID: ${requestId}`,
   });
 
   // ----------------------------------------------------------------------
+  // 6.9 AI assistant user feedback (spec PART 92). Privacy-first by design:
+  // only the rating, an optional category and the page section are stored —
+  // NEVER the question or answer text. Review is admin-key gated.
+  // ----------------------------------------------------------------------
+  const AI_FEEDBACK_FILE = path.join(RUNTIME_DIR, 'ai-feedback.json');
+  type AiFeedbackEntry = { id: string; rating: 'helpful' | 'not_helpful'; category?: string; route?: string; createdAt: string };
+  const AI_FEEDBACK: AiFeedbackEntry[] = (() => {
+    try {
+      const persisted = readJsonFile<AiFeedbackEntry[]>(AI_FEEDBACK_FILE, []);
+      return Array.isArray(persisted) ? persisted.slice(-2000) : [];
+    } catch {
+      return [];
+    }
+  })();
+  const persistAiFeedback = () => writeJsonFile(AI_FEEDBACK_FILE, AI_FEEDBACK);
+
+  app.post('/api/ai/feedback', (req, res) => {
+    const rl = hitRateLimit('ai-feedback', String(req.ip || 'anonymous'), 30, 5 * 60 * 1000);
+    if (!rl.allowed) {
+      return res.status(429).json({ success: false, code: 'RATE_LIMITED', error: 'Too much feedback too quickly. Please try again later.' });
+    }
+    const { rating, category, route } = req.body || {};
+    if (rating !== 'helpful' && rating !== 'not_helpful') {
+      return res.status(400).json({ success: false, error: 'Feedback rating must be "helpful" or "not_helpful".' });
+    }
+    const clean = (v: unknown, max: number): string | undefined => {
+      const t = String(v ?? '').replace(/[\r\n\t]/g, ' ').replace(/[<>{}]/g, '').trim();
+      return t ? t.slice(0, max) : undefined;
+    };
+    const entry: AiFeedbackEntry = {
+      id: `fb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      rating,
+      category: ['INCORRECT', 'OUTDATED', 'UNSAFE', 'MISSING', 'WRONG_NAVIGATION', 'WRONG_ENTITY', 'OTHER'].includes(String(category)) ? clean(category, 24) : undefined,
+      route: clean(route, 40),
+      createdAt: new Date().toISOString(),
+    };
+    AI_FEEDBACK.push(entry);
+    if (AI_FEEDBACK.length > 2000) AI_FEEDBACK.splice(0, AI_FEEDBACK.length - 2000);
+    persistAiFeedback();
+    return res.status(201).json({ success: true, message: 'Thank you — your feedback helps improve GlobalHealth AI.' });
+  });
+
+  app.get('/api/ai/feedback', (req, res) => {
+    const adminKey = config.ghAdminKey;
+    if (!adminKey || String(req.headers?.['x-admin-key'] || '') !== adminKey) {
+      return res.status(403).json({ success: false, error: 'Not authorized.' });
+    }
+    const summary = AI_FEEDBACK.reduce(
+      (acc, f) => {
+        acc[f.rating] += 1;
+        return acc;
+      },
+      { helpful: 0, not_helpful: 0 } as { helpful: number; not_helpful: number }
+    );
+    return res.json({ success: true, summary, recent: AI_FEEDBACK.slice(-100).reverse() });
+  });
+
+  // ----------------------------------------------------------------------
   // 7. AI Assistant Endpoint (GlobalHealth Integration)
   // ----------------------------------------------------------------------
   app.post('/api/ai-assistant', async (req, res) => {
@@ -8084,6 +8142,7 @@ Request ID: ${requestId}`,
           doctors: INITIAL_PORTAL_DOCTORS,
           hospitals: INITIAL_HOSPITALS,
           pharmacyProducts: PHARMACY_PRODUCTS,
+          departments: INITIAL_DEPARTMENTS,
         },
       });
 
@@ -8178,6 +8237,14 @@ ${buildPolicyBlock()}${langInstruction}${identityInstruction}${
       } catch (err) {
         if (err instanceof AiProviderError && err.code === 'NOT_CONFIGURED') {
           return res.status(503).json({ error: 'GEMINI_API_KEY is not configured on the server.' });
+        }
+        // Provider outage (PART 142): the website keeps working; the assistant
+        // reports a clean, retryable unavailability — never a raw stack trace.
+        if (err instanceof AiProviderError && err.code === 'PROVIDER_FAILED') {
+          return res.status(503).json({
+            error: 'The AI service is temporarily unavailable. Please try again shortly.',
+            code: 'AI_PROVIDER_UNAVAILABLE',
+          });
         }
         throw err;
       }
