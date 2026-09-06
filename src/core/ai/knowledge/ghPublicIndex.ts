@@ -38,6 +38,8 @@ import { MEDICAL_MAP_FACILITIES } from '../../../data/medicalMapData';
 import { FORUM_POSTS } from '../../../data/forumPosts';
 import { INITIAL_NEWS_ARTICLES } from '../../../data/newsManagementData';
 import { ALL_400_MEDICINES } from '../../../data/medicines/index';
+import { aliasExpansions } from './ghAliases';
+import { EngineDoc, ScoredHit, lazyIndex, searchIndex } from './ghRetrievalEngine';
 
 /** Public document schema (spec §61/§62/§63, unified). */
 export interface PublicDoc {
@@ -113,49 +115,21 @@ const makeDoc = (d: Omit<PublicDoc, 'sourceType' | 'accessLevel' | 'indexedAt' |
   return doc;
 };
 
-const textIndex = (doc: PublicDoc): string =>
-  `${doc.title} ${doc.summary} ${doc.details} ${doc.keywords.join(' ')}`.toLowerCase();
+/* ------------------------------------------------------------------ *
+ * Retrieval index (BM25F, built once on first search)
+ * ------------------------------------------------------------------ */
 
-// Pure function words carry no topic identity — excluded from matching so
-// question phrasing never dilutes the signal.
-const STOPWORDS = new Set([
-  'the', 'and', 'for', 'are', 'but', 'not', 'you', 'your', 'his', 'her', 'its',
-  'this', 'that', 'these', 'those', 'with', 'about', 'from', 'into', 'over',
-  'what', 'which', 'who', 'whom', 'when', 'where', 'why', 'how', 'does', 'did',
-  'can', 'could', 'should', 'would', 'will', 'shall', 'may', 'might', 'must',
-  'have', 'has', 'had', 'was', 'were', 'been', 'being', 'there', 'their',
-  'them', 'they', 'she', 'him', 'any', 'all', 'get', 'got',
-]);
+const toEngineDoc = (d: PublicDoc): EngineDoc<PublicDoc> => ({
+  id: d.documentId,
+  type: d.entityType,
+  title: d.title,
+  keywords: d.keywords.join(' '),
+  summary: d.summary,
+  details: d.details,
+  ref: d,
+});
 
-function matchesDoc(doc: PublicDoc, text: string): boolean {
-  const hay = textIndex(doc);
-  const words = text
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
-  if (!words.length) return false;
-  // Whole-word match with a singular fallback ("calculators" -> "calculator").
-  const hit = (w: string): boolean => new RegExp(`\\b${w}\\b`).test(hay) || (w.endsWith('s') && new RegExp(`\\b${w.slice(0, -1)}\\b`).test(hay));
-  const found = words.filter(hit);
-  if (found.length / words.length < 0.5) return false;
-  // Identity requirement: at least one matched word must appear in the doc's
-  // TITLE or KEYWORDS — body-word overlap alone is not enough. This keeps
-  // large libraries (1000 recipes) from matching vague queries.
-  const titleKw = `${doc.title} ${doc.keywords.join(' ')}`.toLowerCase();
-  return found.some((w) => titleKw.includes(w) || (w.endsWith('s') && titleKw.includes(w.slice(0, -1))));
-}
-
-function searchDocs(docs: PublicDoc[], text: string, max: number): PublicDoc[] {
-  const hits = docs.filter((d) => matchesDoc(d, text));
-  // Prefer higher word coverage, then shorter (more focused) titles.
-  const scored = hits.map((d) => {
-    const words = text.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
-    const found = words.filter((w) => textIndex(d).includes(w)).length;
-    return { d, score: words.length ? found / words.length : 0 };
-  });
-  scored.sort((a, b) => b.score - a.score || a.d.title.length - b.d.title.length);
-  return scored.slice(0, max).map((s) => s.d);
-}
+const publicRetrievalIndex = lazyIndex<PublicDoc>(() => allPublicDocs().map(toEngineDoc));
 
 /* ------------------------------------------------------------------ *
  * 1. HEALTH TOOLS — 80 public calculators (spec §24, §27)
@@ -204,7 +178,13 @@ export const RECIPE_DOCS: PublicDoc[] = ALL_1000_RECIPES.map((r: any) =>
       r.cuisine ? `cuisine: ${clean(r.cuisine, 30)}` : '',
       r.prepTime ? `prep ${clean(r.prepTime, 12)}` : '',
       r.cookTime ? `cook ${clean(r.cookTime, 12)}` : '',
-      cleanList(r.dietTags, 4),
+      cleanList(r.dietTags, 6),
+      Array.isArray(r.healthBenefits) && r.healthBenefits.length
+        ? `health benefits: ${cleanList(r.healthBenefits, 3, 90)}`
+        : '',
+      Array.isArray(r.diseasesPrevented) && r.diseasesPrevented.length
+        ? `commonly chosen for: ${cleanList(r.diseasesPrevented, 4, 50)}`
+        : '',
       Array.isArray(r.ingredients) && r.ingredients.length
         ? `ingredients include: ${r.ingredients
             .slice(0, 6)
@@ -215,7 +195,14 @@ export const RECIPE_DOCS: PublicDoc[] = ALL_1000_RECIPES.map((r: any) =>
     ]
       .filter(Boolean)
       .join(' · '),
-    keywords: ['recipe', 'meal', clean(r.cuisine, 24).toLowerCase(), ...cleanList(r.dietTags, 3, 20).split('; ').map((x) => x.toLowerCase())],
+    keywords: [
+      'recipe',
+      'meal',
+      'dish',
+      clean(r.cuisine, 24).toLowerCase(),
+      ...cleanList(r.dietTags, 6, 24).split('; ').map((x) => x.toLowerCase()),
+      ...cleanList(r.diseasesPrevented, 4, 30).split('; ').map((x) => x.toLowerCase()),
+    ].filter(Boolean),
     route: 'recipes',
     sourceTitle: 'GlobalHealth → Recipes',
     lastUpdated: INDEXED_AT,
@@ -635,17 +622,35 @@ export function publicIndexStats(): PublicIndexStats {
   };
 }
 
-/** Search across the unified public content index. */
+/** Search across the unified public content index (BM25F ranked). */
 export function searchPublicIndex(text: string, maxPerType = 2, totalMax = 6): PublicDoc[] {
-  const docs = allPublicDocs();
-  const byType = new Map<string, PublicDoc[]>();
-  for (const d of docs) {
-    if (!matchesDoc(d, text)) continue;
-    const list = byType.get(d.entityType) ?? [];
-    if (list.length < maxPerType) list.push(d);
-    byType.set(d.entityType, list);
-  }
-  const out: PublicDoc[] = [];
-  for (const list of byType.values()) out.push(...list);
-  return out.slice(0, totalMax);
+  return searchPublicIndexScored(text, { maxPerType, limit: totalMax }).map((h) => h.doc.ref);
+}
+
+/** Honorifics identify a person's title, never a document. */
+const WEAK_PUBLIC_TERMS = new Set(['dr', 'prof', 'professor', 'mr', 'mrs', 'ms', 'shri', 'sir', 'madam']);
+
+export interface PublicIndexSearchOptions {
+  maxPerType?: number;
+  limit?: number;
+  /** Intent boosting, e.g. { RECIPE: 1.4 } when the user asks for a recipe. */
+  typeBoosts?: Record<string, number>;
+  minScore?: number;
+}
+
+/** Ranked search returning scores (used by retrieval composition + eval). */
+export function searchPublicIndexScored(
+  text: string,
+  options: PublicIndexSearchOptions = {}
+): ScoredHit<PublicDoc>[] {
+  const query = String(text || '');
+  if (!query.trim()) return [];
+  return searchIndex(publicRetrievalIndex(), query, {
+    limit: options.limit ?? 6,
+    maxPerType: options.maxPerType ?? 2,
+    typeBoosts: options.typeBoosts,
+    minScore: options.minScore ?? 1.15,
+    expansions: aliasExpansions(query),
+    weakIdentityTerms: WEAK_PUBLIC_TERMS,
+  });
 }

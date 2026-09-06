@@ -55,3 +55,17 @@ and never touch production `data/`.
 - 2FA bypass attempt.
 - Client-supplied role escalation.
 - `DEPLOYMENT_API_MISMATCH` for `/api/*` returning HTML.
+
+### AI grounding quality (retrieval eval)
+- `npm run ai:eval` — golden-set evaluation of the retrieval path used by
+  `/api/ai-assistant` (hit@1 / hit@3 / recall + negative privacy-noise checks).
+  Exits non-zero below its thresholds, so it can gate CI.
+- `npm run ai:report` — coverage ledger: every indexed route/entity and every
+  deliberate exclusion with its reason.
+- Unit tests: `src/core/ai/knowledge/ghRetrievalEngine.test.ts` (ranking,
+  stemming, typo repair, identity/coverage gates, intent boosts) and
+  `src/core/ai/knowledge/ghAccountKnowledge.test.ts` (signed-in layer is closed
+  to guests and contains no personal data).
+- `npm run ai:doctor` — end-to-end stack diagnosis (knowledge → retrieval →
+  model provider). Use it first whenever the assistant "stops working": it
+  distinguishes a training/grounding problem from a missing `GEMINI_API_KEY`.

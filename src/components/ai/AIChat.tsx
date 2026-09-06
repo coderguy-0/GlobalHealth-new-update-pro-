@@ -11,6 +11,8 @@ interface AIChatProps {
   loading?: boolean;
   /** Index of the last assistant turn that failed (for Retry). */
   failedMessageId?: string | null;
+  /** Why that reply failed — shown instead of a generic message. */
+  failedReason?: { kind: 'network' | 'unavailable' | 'auth' | 'message'; message: string } | null;
   onRetryMessage?: () => void;
   onPrompt: (prompt: string) => void;
   onNavigate?: (tab: string) => void;
@@ -31,6 +33,7 @@ export const AIChat: React.FC<AIChatProps> = ({
   messages,
   loading,
   failedMessageId,
+  failedReason,
   onRetryMessage,
   onPrompt,
   onNavigate,
@@ -99,9 +102,9 @@ export const AIChat: React.FC<AIChatProps> = ({
                   failedMessageId === msg.id ? (
                     <div className="flex items-center gap-2">
                       <AIErrorState
-                        kind="message"
+                        kind={failedReason?.kind || 'message'}
                         compact
-                        message="The AI reply could not be generated."
+                        message={failedReason?.message || 'The AI reply could not be generated. Please retry.'}
                         onRetry={onRetryMessage}
                       />
                     </div>

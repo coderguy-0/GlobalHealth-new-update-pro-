@@ -101,6 +101,10 @@ export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initi
   // ---- Send pipeline ----
   const [loadingReply, setLoadingReply] = useState(false);
   const [failedMessageId, setFailedMessageId] = useState<string | null>(null);
+  // WHY the last reply failed (missing provider key, rate limit, timeout,
+  // network). Without this the thread showed a generic "could not be
+  // generated", which hid an actionable server-side cause from the user.
+  const [failedReason, setFailedReason] = useState<SendError | null>(null);
   const [sendError, setSendError] = useState<SendError | null>(null);
   const retryRef = useRef<{ prompt: string } | null>(null);
   const pendingSendRef = useRef<PendingSend | null>(null);
@@ -148,6 +152,7 @@ export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initi
       setHistoryError(null);
       setSessionConversation(freshConversation());
       setFailedMessageId(null);
+      setFailedReason(null);
       setSendError(null);
       setShareUrl(null);
       return;
@@ -458,6 +463,7 @@ export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initi
       if (!text || loadingReply) return;
       setSendError(null);
       setFailedMessageId(null);
+      setFailedReason(null);
       // Re-submitting a message whose POST may have succeeded but whose
       // response was lost must reuse the SAME idempotency key so the server
       // cannot create a duplicate user message.
@@ -592,6 +598,7 @@ export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initi
       updateActiveLocal((c) => ({ ...c, messages: [...c.messages, failedBot], updatedAt: Date.now() }));
       retryRef.current = { prompt: text };
       setFailedMessageId(failedBot.id);
+      setFailedReason(result.err);
     },
     [loadingReply, isSignedIn, activeUserConversation, updateActiveLocal, persistMessage, bumpSummary, buildEhrReply, runAssistantReply]
   );
@@ -600,6 +607,7 @@ export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initi
     const prompt = retryRef.current?.prompt;
     if (!prompt || loadingReply) return;
     setFailedMessageId(null);
+    setFailedReason(null);
     retryRef.current = null;
     setLoadingReply(true);
     const retryBotId = createAiMessageId('assistant');
@@ -646,6 +654,7 @@ export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initi
       updateActiveLocal((c) => ({ ...c, messages: [...c.messages, failedBot], updatedAt: Date.now() }));
       retryRef.current = { prompt };
       setFailedMessageId(failedBot.id);
+      setFailedReason(result.err);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runAssistantReply, loadingReply, isSignedIn, updateActiveLocal, failedMessageId, activeUserConversation?.id]);
@@ -1041,6 +1050,7 @@ export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initi
                 messages={messages}
                 loading={loadingReply}
                 failedMessageId={failedMessageId}
+                failedReason={failedReason}
                 onRetryMessage={handleRetryReply}
                 onPrompt={(p) => {
                   setInjectedPrompt(null);

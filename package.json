@@ -12,7 +12,10 @@
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "test:unit": "node --import tsx --test 'src/server/*.test.ts'",
     "accept:ai": "node scripts/acceptance/globalhealth-ai-auth-chat.mjs",
-    "ai:report": "node --import tsx scripts/ai-public-index-report.mjs"
+    "ai:report": "node --import tsx scripts/ai-public-index-report.mjs",
+    "ai:eval": "node --import tsx scripts/ai-retrieval-eval.mjs",
+    "ai:doctor": "node --import tsx scripts/ai-doctor.mjs",
+    "ai:questions": "node --import tsx scripts/ai-question-pack.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

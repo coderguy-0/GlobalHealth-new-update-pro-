@@ -26,7 +26,9 @@ import {
   HELP_POLICY_DOCS,
 } from '../src/core/ai/knowledge/ghPublicIndex.ts';
 import { PUBLIC_API_INVENTORY, apiInventoryStats } from '../src/core/ai/knowledge/ghPublicApis.ts';
+import { ACCOUNT_DOCS, retrieveAccountKnowledge } from '../src/core/ai/knowledge/ghAccountKnowledge.ts';
 import { retrieveVerifiedKnowledge } from '../src/core/ai/aiKnowledge.ts';
+import { retrievePublicKnowledge } from '../src/core/ai/knowledge/ghPublicSearch.ts';
 import { ALL_400_MEDICINES } from '../src/data/medicines/index.ts';
 import { ALL_DISEASES } from '../src/data/diseases/diseaseIndex.ts';
 import { ALL_1000_MEDICAL_TESTS } from '../src/data/medicalTests/index.ts';
@@ -109,10 +111,31 @@ console.log('     doctor-console, doctor-consent): excluded — contain private/
 console.log('   Private user records, EHR, messages, notifications, saved content: never indexed');
 console.log('   (private fields cannot leak by construction — adapters use explicit field whitelists)');
 
+// ---- 6b. Signed-in (account) knowledge layer ---------------------------------
+console.log('\n6b. ACCOUNT FEATURE LAYER (signed-in callers only — ghAccountKnowledge.ts)');
+console.log(`   Feature records: ${ACCOUNT_DOCS.length} (${ACCOUNT_DOCS.map((d) => d.route).join(', ')})`);
+console.log(`   Guest retrieval returns: ${retrieveAccountKnowledge('what is on my dashboard', false).length} records (must be 0)`);
+console.log(`   Signed-in retrieval returns: ${retrieveAccountKnowledge('what is on my dashboard', true).length} record(s)`);
+console.log('   These records describe FEATURES only. A specific user\'s values are');
+console.log('   resolved per-request from the validated session (aiUserContext.ts).');
+
 // ---- 7. Retrieval sanity ------------------------------------------------------
-const probe = retrieveVerifiedKnowledge('heart attack', 3);
-console.log('\n7. RETRIEVAL SANITY PROBE');
-console.log(`   "heart attack" → ${probe.hits.map((h) => `${h.kind}: ${h.name}`).join('; ') || 'NO HITS'}`);
+const probes = ['heart attack', 'parcetamol dosage', 'bmi calculator', 'privacy policy data deletion'];
+const probeCatalog = {
+  doctors: INITIAL_PORTAL_DOCTORS,
+  hospitals: INITIAL_HOSPITALS,
+  pharmacyProducts: PHARMACY_PRODUCTS,
+};
+console.log('\n7. RETRIEVAL SANITY PROBES (what actually reaches the prompt)');
+for (const q of probes) {
+  const probe = retrievePublicKnowledge(q, { directoryCatalog: probeCatalog });
+  const top = probe.hits.slice(0, 3).map((h) => `${h.kind}: ${h.name}`).join('; ');
+  console.log(`   "${q}" → ${top || 'nothing retrieved (the assistant must say it does not know)'}`);
+  if (probe.diagnostics.droppedLayers.length) {
+    console.log(`       layers dropped as off-topic: ${probe.diagnostics.droppedLayers.join(', ')}`);
+  }
+}
+console.log('   Full grounding quality is measured by: npm run ai:eval');
 
 // ---- 8. Coverage score --------------------------------------------------------
 const routeCoverage = Math.round((rs.publicRoutes / rs.totalRoutes) * 100);

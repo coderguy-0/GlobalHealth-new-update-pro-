@@ -15,7 +15,8 @@
 import { ALL_400_MEDICINES } from '../../data/medicines/index';
 import { ALL_DISEASES } from '../../data/diseases/diseaseIndex';
 import { ALL_1000_MEDICAL_TESTS } from '../../data/medicalTests/index';
-import { expandQueryWithAliases } from './knowledge/ghAliases';
+import { aliasExpansions } from './knowledge/ghAliases';
+import { EngineDoc, lazyIndex, searchIndex } from './knowledge/ghRetrievalEngine';
 
 export interface KnowledgeSource {
   kind: 'medicine' | 'disease' | 'test' | 'doctor' | 'hospital' | 'pharmacy-product';
@@ -33,29 +34,72 @@ export interface KnowledgeResult {
 
 const MAX_HITS = 3;
 
-function nameMatches(name: string, text: string): boolean {
-  const n = name.trim().toLowerCase();
-  if (!n || n.length < 3) return false;
-  // Full-phrase containment first (exact, precise).
-  if (text.includes(n)) return true;
-  // Then token-aware matching: real platform names are multi-word
-  // ("Essential hypertension", "Paracetamol IP 650mg") and users rarely type
-  // them verbatim. Require a strong fraction of significant (4+ char) tokens.
-  // Ultra-generic clinical words are ignored so "blood" alone can never drag
-  // in an unrelated entry (e.g. an arterial blood gas test for a BP question).
-  // Tokens must appear as WHOLE WORDS — "total" must never match "totally".
-  const tokens = n
-    .split(/[^a-z0-9]+/)
-    .filter((t) => t.length >= 4 && !TOKEN_GENERIC_WORDS.has(t));
-  if (!tokens.length) return false;
-  const found = tokens.filter((t) => new RegExp(`\\b${t}\\b`).test(text)).length;
-  return found / tokens.length >= 0.5;
-}
+/* --------------------------------------------------------------------------
+   Ranked clinical index (BM25F over the verified libraries).
 
-// Words so common in clinical naming that they carry almost no identity.
-const TOKEN_GENERIC_WORDS = new Set([
-  'blood', 'test', 'tests', 'profile', 'panel', 'level', 'levels', 'function', 'general', 'complete', 'disease', 'disorder', 'infection',
-]);
+   Names, generic names, abbreviations and alternative names are the identity
+   fields; descriptions/symptoms add recall but can never pull in a record on
+   their own (the engine's identity gate). This replaces the old first-match
+   scan, so "heart attack" returns the myocardial-infarction record FIRST
+   instead of whichever record happened to appear earlier in the array.
+   -------------------------------------------------------------------------- */
+
+type ClinicalRef =
+  | { kind: 'medicine'; item: (typeof ALL_400_MEDICINES)[number] }
+  | { kind: 'disease'; item: (typeof ALL_DISEASES)[number] }
+  | { kind: 'test'; item: (typeof ALL_1000_MEDICAL_TESTS)[number] };
+
+const join = (...parts: unknown[]): string =>
+  parts
+    .flat()
+    .map((p) => String(p ?? '').trim())
+    .filter(Boolean)
+    .join(' ');
+
+const clinicalIndex = lazyIndex<ClinicalRef>(() => {
+  const docs: EngineDoc<ClinicalRef>[] = [];
+
+  for (const m of ALL_400_MEDICINES) {
+    docs.push({
+      id: `medicine:${m.id ?? m.name}`,
+      type: 'medicine',
+      title: m.name,
+      keywords: join(m.genericName, m.therapeuticGroup, (m as any).category, (m as any).alternatives),
+      summary: join(m.description || m.whatIs),
+      details: join((m as any).uses, (m as any).dosageForms),
+      ref: { kind: 'medicine', item: m },
+    });
+  }
+
+  for (const d of ALL_DISEASES) {
+    const name = d.title || (d as any).medicalName || (d as any).commonName || '';
+    if (!name) continue;
+    docs.push({
+      id: `disease:${(d as any).id ?? name}`,
+      type: 'disease',
+      title: name,
+      keywords: join((d as any).medicalName, (d as any).commonName, (d as any).category, (d as any).specialist, (d as any).bodySystem, (d as any).diseaseType),
+      summary: join(d.summary),
+      details: join((d as any).earlySymptoms, (d as any).commonSymptoms, (d as any).symptoms, (d as any).causes),
+      ref: { kind: 'disease', item: d },
+    });
+  }
+
+  for (const t of ALL_1000_MEDICAL_TESTS) {
+    if (!t.name) continue;
+    docs.push({
+      id: `test:${(t as any).id ?? t.name}`,
+      type: 'test',
+      title: t.name,
+      keywords: join((t as any).commonName, (t as any).abbreviation, (t as any).alternativeNames, (t as any).category, (t as any).subcategory),
+      summary: join((t as any).clinicalPurpose || t.purpose || (t as any).description),
+      details: join((t as any).whatItMeasures, (t as any).whyOrdered, (t as any).specimenType || t.sampleType),
+      ref: { kind: 'test', item: t },
+    });
+  }
+
+  return docs;
+});
 
 function medicineSnippet(m: (typeof ALL_400_MEDICINES)[number]): KnowledgeSource {
   const details = [
@@ -135,41 +179,100 @@ function testSnippet(t: (typeof ALL_1000_MEDICAL_TESTS)[number]): KnowledgeSourc
   };
 }
 
-export function retrieveVerifiedKnowledge(text: string, maxHits = MAX_HITS): KnowledgeResult {
+export interface VerifiedRetrievalOptions {
+  /** Minimum BM25F score a record must reach (precision dial). */
+  minScore?: number;
+  /** Max records of one kind (medicine/disease/test). */
+  maxPerKind?: number;
+}
+
+/**
+ * Platform vocabulary. A clinical record that matched ONLY these words is a
+ * coincidence ("hospitals near me" must not return hospital-acquired
+ * pneumonia), so such hits are dropped.
+ */
+const WEAK_CLINICAL_TERMS = new Set([
+  'blood', 'test', 'level', 'profile', 'panel', 'function', 'general',
+  'complete', 'disease', 'disorder', 'infection', 'syndrome', 'screening',
+  'index', 'ratio', 'total', 'high', 'low', 'normal', 'acute', 'chronic',
+  'serum', 'urine', 'body', 'health', 'medicine', 'medication', 'drug',
+  'tablet', 'dose', 'result', 'report', 'range', 'value', 'assay', 'study',
+  'child', 'children', 'kid', 'baby', 'infant', 'adult', 'elderly', 'women',
+  'woman', 'men', 'man', 'pediatric', 'specialized', 'marker', 'type',
+  // Question scaffolding and ambiguous everyday words: they describe what the
+  // user wants to know, not which record answers it.
+  'caus', 'symptom', 'sign', 'treatment', 'cure', 'prevention', 'diagnosis',
+  'motion', 'problem', 'condition', 'issue', 'pain', 'care', 'management',
+]);
+
+const PLATFORM_ONLY_TERMS = new Set([
+  'hospital', 'doctor', 'clinic', 'appointment', 'book', 'booking', 'page',
+  'section', 'website', 'site', 'app', 'near', 'nearby', 'stock', 'price',
+  'cost', 'fee', 'buy', 'order', 'account', 'login', 'signin', 'map',
+  'news', 'recipe', 'calculator', 'tool', 'community', 'profile', 'search',
+  'find', 'open', 'use', 'available', 'availability',
+]);
+
+/**
+ * Real words that belong to the product, not to medicine. They are never
+ * "repaired" into a clinical term (so "consent" can never become "content").
+ */
+const NON_CLINICAL_TERMS = new Set([
+  'consent', 'privacy', 'policy', 'terms', 'account', 'password', 'login',
+  'signin', 'signup', 'profile', 'settings', 'dashboard', 'appointment',
+  'booking', 'notification', 'message', 'upload', 'download', 'delete',
+  'website', 'section', 'page', 'button', 'filter', 'search', 'history',
+  'recipe', 'calculator', 'community', 'partner', 'order', 'cart', 'price',
+  'refund', 'support', 'contact', 'article', 'news',
+]);
+
+/** Ranked hits with their scores (used by composition + the eval harness). */
+export function rankVerifiedKnowledge(
+  text: string,
+  maxHits = MAX_HITS,
+  options: VerifiedRetrievalOptions = {}
+): { hit: KnowledgeSource; score: number; matched: string[] }[] {
+  const query = String(text || '');
+  if (!query.trim()) return [];
   // Alias-aware retrieval (spec §96): layman phrases ("heart attack") are
-  // expanded with their clinical terms ("myocardial infarction") BEFORE
-  // matching, so verified content is found without weakening exact matching.
-  const clean = expandQueryWithAliases(String(text || '')).toLowerCase();
-  const hits: KnowledgeSource[] = [];
+  // expanded with their clinical terms ("myocardial infarction") before
+  // ranking. Expansions score below the user's own words.
+  const scored = searchIndex(clinicalIndex(), query, {
+    limit: maxHits * 2,
+    maxPerType: options.maxPerKind ?? 2,
+    minScore: options.minScore ?? 6,
+    relativeCutoff: 0.3,
+    expansions: aliasExpansions(query),
+    weakIdentityTerms: WEAK_CLINICAL_TERMS,
+    protectedTerms: NON_CLINICAL_TERMS,
+  });
+
+  const out: { hit: KnowledgeSource; score: number; matched: string[] }[] = [];
   const seen = new Set<string>();
-
-  for (const m of ALL_400_MEDICINES) {
-    if (hits.filter((h) => h.kind === 'medicine').length >= 2) break;
-    if (!nameMatches(m.name, clean) && !nameMatches(m.genericName || '', clean)) continue;
-    const key = `med:${m.name.toLowerCase()}`;
+  for (const s of scored) {
+    if (out.length >= maxHits) break;
+    if (s.matched.every((t) => PLATFORM_ONLY_TERMS.has(t))) continue;
+    const ref = s.doc.ref;
+    const hit =
+      ref.kind === 'medicine'
+        ? medicineSnippet(ref.item)
+        : ref.kind === 'disease'
+          ? diseaseSnippet(ref.item)
+          : testSnippet(ref.item);
+    const key = `${hit.kind}:${hit.name.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    hits.push(medicineSnippet(m));
+    out.push({ hit, score: s.score, matched: s.matched });
   }
+  return out;
+}
 
-  for (const d of ALL_DISEASES) {
-    if (hits.filter((h) => h.kind === 'disease').length >= Math.min(2, maxHits)) break;
-    const name = d.title || d.medicalName || d.commonName || '';
-    if (!nameMatches(name, clean) && !nameMatches(d.medicalName || '', clean)) continue;
-    const key = `dis:${name.toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    hits.push(diseaseSnippet(d));
-  }
-
-  for (const t of ALL_1000_MEDICAL_TESTS) {
-    if (hits.filter((h) => h.kind === 'test').length >= Math.min(2, maxHits)) break;
-    if (!nameMatches(t.name, clean)) continue;
-    const key = `test:${t.name.toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    hits.push(testSnippet(t));
-  }
+export function retrieveVerifiedKnowledge(
+  text: string,
+  maxHits = MAX_HITS,
+  options: VerifiedRetrievalOptions = {}
+): KnowledgeResult {
+  const hits = rankVerifiedKnowledge(text, maxHits, options).map((r) => r.hit);
 
   const limited = hits.slice(0, maxHits);
   const retrievedAt = new Date().toISOString().slice(0, 10);

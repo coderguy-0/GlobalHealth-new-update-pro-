@@ -16,7 +16,8 @@
    ========================================================================== */
 
 import { KnowledgeSource } from '../aiKnowledge';
-import { expandQueryWithAliases } from './ghAliases';
+import { aliasExpansions } from './ghAliases';
+import { EngineDoc, buildRetrievalIndex, searchIndex } from './ghRetrievalEngine';
 
 export interface DirectoryDoctor {
   id?: string;
@@ -218,10 +219,31 @@ export function retrieveDirectoryKnowledge(
   maxHits = 3,
   catalog: DirectoryCatalog | null | undefined
 ): DirectoryHit[] {
+  return retrieveDirectoryKnowledgeScored(text, maxHits, catalog).map((h) => h.hit);
+}
+
+/**
+ * Same retrieval, with a relevance score per hit. Exact identity matches keep
+ * their precision-first behaviour (high score); remaining slots are filled by
+ * the shared BM25F engine, which adds ranking and typo tolerance
+ * ("cardiologst", "apolo hospital") without loosening the identity rules.
+ */
+export function retrieveDirectoryKnowledgeScored(
+  text: string,
+  maxHits = 3,
+  catalog: DirectoryCatalog | null | undefined
+): { hit: DirectoryHit; score: number }[] {
   if (!catalog) return [];
-  const expanded = expandSpecialties(expandQueryWithAliases(String(text || '')));
-  const textLower = expanded.toLowerCase();
-  const hits: DirectoryHit[] = [];
+  // Identity matching uses the user's own words plus SPECIALTY normalisation
+  // only. Clinical alias expansion ("bmi" → "body mass index") must not leak
+  // in here: a device whose name contains "Index" is not a BMI calculator.
+  const textLower = expandSpecialties(String(text || '').toLowerCase());
+  const hits: { hit: DirectoryHit; score: number }[] = [];
+  // Exact identity matches are precise but not automatically the BEST answer:
+  // "tell me about paracetamol" is a library question, "is Dolo in stock" is a
+  // directory question. This score keeps exact directory hits well above weak
+  // engine matches while letting a strong verified-library match lead.
+  const EXACT_SCORE = 20;
 
   // Relationship lookups (spec PART 19): hospitalId → hospital name, and
   // hospitalId → department names. Real application links only.
@@ -246,8 +268,11 @@ export function retrieveDirectoryKnowledge(
     const specialtyHit =
       specialty.length > 3 && (textLower.includes(specialty.toLowerCase()) || strongTokenMatch(specialty, textLower));
     if (!nameHit && !specialtyHit) continue;
-    if (hits.some((h) => h.name === d.name)) continue;
-    hits.push(doctorSnippet(d, d.hospitalId ? hospitalNameById.get(String(d.hospitalId)) : undefined));
+    if (hits.some((h) => h.hit.name === d.name)) continue;
+    hits.push({
+      hit: doctorSnippet(d, d.hospitalId ? hospitalNameById.get(String(d.hospitalId)) : undefined),
+      score: EXACT_SCORE,
+    });
   }
 
   for (const h of catalog.hospitals ?? []) {
@@ -255,8 +280,11 @@ export function retrieveDirectoryKnowledge(
     const nameHit = nameIdentityMatch(h.name, textLower);
     const cityHit = Boolean(h.city && matches(h.city, textLower) && textLower.includes('hospital'));
     if (!nameHit && !cityHit) continue;
-    if (hits.some((x) => x.name === h.name)) continue;
-    hits.push(hospitalSnippet(h, h.id ? departmentsByHospital.get(String(h.id)) : undefined));
+    if (hits.some((x) => x.hit.name === h.name)) continue;
+    hits.push({
+      hit: hospitalSnippet(h, h.id ? departmentsByHospital.get(String(h.id)) : undefined),
+      score: EXACT_SCORE,
+    });
   }
 
   for (const p of catalog.pharmacyProducts ?? []) {
@@ -272,10 +300,95 @@ export function retrieveDirectoryKnowledge(
       matches(p.genericName || '', textLower) ||
       strongTokenMatch(p.genericName || '', textLower);
     if (!identityHit) continue;
-    if (hits.some((x) => x.name === p.name)) continue;
-    hits.push(productSnippet(p));
+    if (hits.some((x) => x.hit.name === p.name)) continue;
+    hits.push({ hit: productSnippet(p), score: EXACT_SCORE });
   }
 
+  // Ranked fallback: fill any remaining slots with engine matches (typo
+  // tolerant, relevance ordered). Identity still has to come from the record's
+  // own name/specialty/brand fields — nothing new is invented here.
+  if (hits.length < maxHits) {
+    const engineHits = searchIndex(buildDirectoryIndex(catalog, hospitalNameById, departmentsByHospital), String(text || ''), {
+      limit: maxHits * 2,
+      maxPerType: maxHits,
+      minScore: 6,
+      relativeCutoff: 0.35,
+      expansions: aliasExpansions(String(text || '')),
+      weakIdentityTerms: WEAK_DIRECTORY_TERMS,
+    });
+    for (const e of engineHits) {
+      if (hits.length >= maxHits) break;
+      if (hits.some((x) => x.hit.name === e.doc.ref.name)) continue;
+      hits.push({ hit: e.doc.ref, score: e.score });
+    }
+  }
+
+  hits.sort((a, b) => b.score - a.score);
   return hits.slice(0, maxHits);
+}
+
+/**
+ * Category words are not identity: "Nowhere Hospital" must never match a real
+ * hospital just because both contain the word "hospital".
+ */
+const WEAK_DIRECTORY_TERMS = new Set([
+  'doctor', 'specialist', 'physician', 'hospital', 'clinic', 'center',
+  'centre', 'institute', 'medical', 'medicine', 'pharmacy', 'chemist',
+  'tablet', 'capsule', 'syrup', 'health', 'care', 'department', 'general',
+  'dr', 'prof', 'professor', 'mr', 'mrs', 'ms', 'shri', 'product', 'partner',
+  'news', 'article', 'latest', 'india', 'city', 'service', 'services',
+]);
+
+/** Engine index over the live directory records handed in by the server. */
+function buildDirectoryIndex(
+  catalog: DirectoryCatalog,
+  hospitalNameById: Map<string, string>,
+  departmentsByHospital: Map<string, string[]>
+) {
+  const docs: EngineDoc<DirectoryHit>[] = [];
+  for (const d of catalog.doctors ?? []) {
+    const hit = doctorSnippet(d, d.hospitalId ? hospitalNameById.get(String(d.hospitalId)) : undefined);
+    docs.push({
+      id: `doctor:${d.id ?? d.name}`,
+      type: 'doctor',
+      title: clean(d.name, 100),
+      keywords: [clean(d.specialty, 80), clean(d.subspecialty, 80), clean(d.departmentName, 80), 'doctor', 'specialist']
+        .filter(Boolean)
+        .join(' '),
+      summary: hit.summary,
+      details: hit.details,
+      ref: hit,
+    });
+  }
+  for (const h of catalog.hospitals ?? []) {
+    const departments = h.id ? departmentsByHospital.get(String(h.id)) : undefined;
+    const hit = hospitalSnippet(h, departments);
+    docs.push({
+      id: `hospital:${h.id ?? h.name}`,
+      type: 'hospital',
+      title: clean(h.name, 120),
+      keywords: [clean(h.city, 60), clean(h.hospitalType, 60), clean(h.ownership, 60), 'hospital', ...(departments ?? [])]
+        .filter(Boolean)
+        .join(' '),
+      summary: hit.summary,
+      details: hit.details,
+      ref: hit,
+    });
+  }
+  for (const p of catalog.pharmacyProducts ?? []) {
+    const hit = productSnippet(p);
+    docs.push({
+      id: `product:${p.id ?? p.name}`,
+      type: 'pharmacy-product',
+      title: clean(p.name, 120),
+      keywords: [clean(p.brandName, 60), clean(p.genericName, 60), clean(p.dosageForm, 30), 'medicine', 'pharmacy']
+        .filter(Boolean)
+        .join(' '),
+      summary: hit.summary,
+      details: hit.details,
+      ref: hit,
+    });
+  }
+  return buildRetrievalIndex(docs);
 }
 
