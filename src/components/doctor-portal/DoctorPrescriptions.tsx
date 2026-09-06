@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, CheckCircle2, Send, Printer, Download, Sparkles, AlertTriangle } from 'lucide-react';
 import { useClinicalWorkspace, PrescriptionMedicine, RX_STATUS_LABEL } from './doctorClinicalData';
 import { useDoctorPortal } from './doctorPortalData';
+import { evaluateMedicationSafety, hasBlockingAlert, FORMULARY } from './clinicalDecisionSupport';
 
 export const DoctorPrescriptions: React.FC<{ onNavigate?: (v: any) => void }> = ({ onNavigate }) => {
-  const { patients, selectedPatientId, addPrescription, updatePrescriptionStatus } = useClinicalWorkspace();
+  const { patients, selectedPatientId, addPrescription, updatePrescriptionStatus, selectPatient } = useClinicalWorkspace();
   const { doctor } = useDoctorPortal();
   const [patientId, setPatientId] = useState(selectedPatientId || patients[0]?.id || '');
   const [rxId, setRxId] = useState('');
@@ -17,16 +18,25 @@ export const DoctorPrescriptions: React.FC<{ onNavigate?: (v: any) => void }> = 
   const [patientVerified, setPatientVerified] = useState(true);
   const [allergyChecked, setAllergyChecked] = useState(true);
 
+  useEffect(() => {
+    if (selectedPatientId) setPatientId(selectedPatientId);
+  }, [selectedPatientId]);
+
   const patient = patients.find((p) => p.id === patientId) || null;
   const allRx = useMemo(() => patients.flatMap((p) => p.prescriptions.map((rx) => ({ ...rx, patientName: p.name }))), [patients]);
+  const candidate = form.name.trim() ? form : undefined;
+  const alerts = useMemo(() => evaluateMedicationSafety(patient, medicines, candidate), [patient, medicines, candidate]);
+  const blocked = hasBlockingAlert(alerts);
 
   const addMedicine = () => {
     if (!form.name.trim() || !form.dose.trim() || !form.frequency.trim()) return;
+    const preview = evaluateMedicationSafety(patient, medicines, { ...form, id: 'tmp' });
+    if (hasBlockingAlert(preview)) return;
     setMedicines((prev) => [...prev, { ...form, id: `m-${Date.now()}` }]);
     setForm((f) => ({ ...f, name: '', strength: '', dose: '', instructions: '' }));
   };
 
-  const ready = patientVerified && allergyChecked && medicines.length > 0 && medicines.every((m) => m.name && m.dose && m.duration);
+  const ready = patientVerified && allergyChecked && medicines.length > 0 && medicines.every((m) => m.name && m.dose && m.duration) && !blocked;
 
   const saveDraft = () => {
     if (!patient) return;
@@ -42,7 +52,7 @@ export const DoctorPrescriptions: React.FC<{ onNavigate?: (v: any) => void }> = 
   };
 
   const sign = () => {
-    if (!patient || !ready) return;
+    if (!patient || !ready || blocked) return;
     const id = `rx-${Date.now()}`;
     const nextId = rxId || `RX-GH-${Math.floor(29000 + Math.random() * 9000)}`;
     addPrescription(patient.id, {
@@ -71,7 +81,7 @@ export const DoctorPrescriptions: React.FC<{ onNavigate?: (v: any) => void }> = 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#8A97A8]">Patient</span>
-                <select value={patientId} onChange={(e) => setPatientId(e.target.value)} className="mt-1 w-full rounded-xl border border-[#E3E8EF] px-3 py-2 text-xs focus:border-[#1769E0] focus:outline-none">
+                <select value={patientId} onChange={(e) => { setPatientId(e.target.value); selectPatient(e.target.value); }} className="mt-1 w-full rounded-xl border border-[#E3E8EF] px-3 py-2 text-xs focus:border-[#1769E0] focus:outline-none">
                   {patients.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.identifier}</option>)}
                 </select>
               </label>
@@ -79,6 +89,19 @@ export const DoctorPrescriptions: React.FC<{ onNavigate?: (v: any) => void }> = 
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#8A97A8]">Prescription ID</span>
                 <input value={rxId} onChange={(e) => setRxId(e.target.value)} placeholder="Auto-generated" className="mt-1 w-full rounded-xl border border-[#E3E8EF] px-3 py-2 text-xs focus:border-[#1769E0] focus:outline-none" />
               </label>
+            </div>
+            {patient && (
+              <p className={`mt-3 rounded-xl px-3 py-2 text-[11px] font-semibold ${patient.allergies.length ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'}`}>
+                Allergies: {patient.allergies.join(', ') || 'NKDA'} · Current: {patient.medications.map((m) => m.name).join(', ') || 'none'}
+              </p>
+            )}
+            <div className="mt-3">
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A97A8]">Formulary</p>
+              <div className="flex flex-wrap gap-1.5">
+                {FORMULARY.map((f) => (
+                  <button key={f.name} type="button" onClick={() => setForm((prev) => ({ ...prev, ...f, id: `m-${Date.now()}` }))} className="rounded-full border border-[#E3E8EF] px-2.5 py-1 text-[10px] font-bold text-[#162235] hover:border-emerald-300 hover:bg-emerald-50">{f.name} {f.strength}</button>
+                ))}
+              </div>
             </div>
             <div className="mt-4 border-t border-[#E3E8EF] pt-4">
               <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#8A97A8]">Add medicine</p>
@@ -117,7 +140,8 @@ export const DoctorPrescriptions: React.FC<{ onNavigate?: (v: any) => void }> = 
             </div>
             <div className="mt-4 flex flex-wrap gap-2 border-t border-[#E3E8EF] pt-4">
               <button type="button" onClick={saveDraft} className="rounded-xl border border-[#E3E8EF] px-3.5 py-2 text-xs font-bold text-[#607086] hover:bg-slate-50">Save draft</button>
-              <button type="button" onClick={() => setStatus('review')} disabled={!ready} className="rounded-xl bg-[#1769E0] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#145bbf] disabled:opacity-50">Review & sign</button>
+              <button type="button" onClick={() => { if (!blocked) setStatus('review'); }} disabled={!ready} className="rounded-xl bg-[#1769E0] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#145bbf] disabled:opacity-50">Review & sign</button>
+              {status === 'review' && <button type="button" onClick={sign} disabled={!ready} className="rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white disabled:opacity-50">Sign prescription</button>}
             </div>
           </section>
           <section className="rounded-2xl border border-[#E3E8EF] bg-white p-5 shadow-soft">

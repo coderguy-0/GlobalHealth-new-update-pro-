@@ -71,6 +71,11 @@ export type Permission =
   | 'doctor.audit.read'
   | 'doctor.analytics.view'
   | 'doctor.ai.use'
+  | 'doctor.vitals.read'
+  | 'doctor.vitals.write'
+  | 'doctor.telemedicine.join'
+  | 'doctor.settings.manage'
+  | 'doctor.ehr.change_request'
   | 'patient.profile.read'
   | 'patient.consent.grant'
   | 'hospital.patient.link'
@@ -209,6 +214,11 @@ export const DOCTOR_PERMISSIONS: Permission[] = [
   'doctor.audit.read',
   'doctor.analytics.view',
   'doctor.ai.use',
+  'doctor.vitals.read',
+  'doctor.vitals.write',
+  'doctor.telemedicine.join',
+  'doctor.settings.manage',
+  'doctor.ehr.change_request',
 ];
 
 export const PATIENT_PERMISSIONS: Permission[] = [

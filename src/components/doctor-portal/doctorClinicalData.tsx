@@ -11,11 +11,14 @@ import { useDoctorPortal } from './doctorPortalData';
 
 export type PatientStatus = 'new' | 'active' | 'follow_up' | 'critical' | 'pending_review';
 export type ConsentedScope = 'basic' | 'appointments' | 'history' | 'labs' | 'imaging' | 'prescriptions' | 'documents';
-export type ConsentStatus = 'not_requested' | 'pending' | 'granted' | 'denied' | 'expired';
+export type ConsentStatus = 'not_requested' | 'pending' | 'granted' | 'denied' | 'expired' | 'revoked';
 export type LabStatus = 'ordered' | 'collected' | 'available' | 'reviewed';
 export type ImagingStatus = 'ordered' | 'available' | 'reviewed';
-export type PrescriptionStatus = 'draft' | 'signed' | 'sent_pharmacy';
-export type ReferralStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'completed';
+export type PrescriptionStatus = 'draft' | 'pending_signature' | 'signed' | 'issued' | 'sent_pharmacy' | 'cancelled' | 'expired';
+export type ReferralStatus = 'draft' | 'sent' | 'accepted' | 'scheduled' | 'in_progress' | 'completed' | 'declined' | 'cancelled';
+export type VitalSource = 'doctor' | 'nurse' | 'hospital' | 'device' | 'patient';
+export type DiagnosisStatus = 'active' | 'resolved' | 'historical';
+export type EhrChangeStatus = 'pending' | 'approved' | 'rejected';
 
 export interface VitalsRecord {
   id: string;
@@ -27,7 +30,11 @@ export interface VitalsRecord {
   spo2: number;
   rr: number;
   weight: number;
+  height?: number;
+  bmi?: number;
+  glucose?: number;
   note?: string;
+  source?: VitalSource;
 }
 export interface ClinicalNote {
   id: string;
@@ -100,6 +107,41 @@ export interface ImagingStudy {
   clinicalNote?: string;
   reviewed?: boolean;
 }
+export interface DiagnosisRecord {
+  id: string;
+  name: string;
+  status: DiagnosisStatus;
+  since: string;
+  icd?: string;
+}
+export interface ImmunizationRecord {
+  id: string;
+  vaccine: string;
+  dose: string;
+  date: string;
+  status: 'complete' | 'due' | 'overdue';
+  nextDue?: string;
+}
+export interface AllergyRecord {
+  id: string;
+  substance: string;
+  type: 'drug' | 'food' | 'environmental';
+  reaction: string;
+  severity: 'mild' | 'moderate' | 'severe';
+  verified: boolean;
+}
+export interface EhrChangeRequest {
+  id: string;
+  patientId: string;
+  doctorId: string;
+  field: string;
+  originalValue: string;
+  requestedValue: string;
+  reason: string;
+  status: EhrChangeStatus;
+  date: string;
+  decidedAt?: string;
+}
 export interface PatientClinical {
   id: string;
   identifier: string;
@@ -110,10 +152,22 @@ export interface PatientClinical {
   bloodGroup: string;
   phone: string;
   email: string;
+  address?: string;
+  emergencyContact?: string;
+  emergencyPhone?: string;
+  highRisk?: boolean;
+  careTeam?: string[];
   status: PatientStatus;
   conditions: string[];
+  diagnoses?: DiagnosisRecord[];
   allergies: string[];
-  medications: { name: string; dose: string; frequency: string; since: string }[];
+  allergyRecords?: AllergyRecord[];
+  medications: { name: string; dose: string; frequency: string; since: string; status?: 'active' | 'stopped' }[];
+  immunizations?: ImmunizationRecord[];
+  surgeries?: string[];
+  hospitalizations?: string[];
+  familyHistory?: string;
+  socialHistory?: string;
   alerts: { severity: 'critical' | 'warning' | 'info'; text: string }[];
   lastVisit: string;
   nextAppointment: string;
@@ -126,20 +180,27 @@ export interface PatientClinical {
   prescriptions: Prescription[];
   labs: LabOrder[];
   imaging: ImagingStudy[];
+  ehrChangeRequests?: EhrChangeRequest[];
 }
 export interface Consultation {
   id: string;
+  encounterId?: string;
+  appointmentId?: string;
   patientId: string;
   date: string;
   start: string;
   type: 'New Consultation' | 'Follow-up' | 'Video' | 'Telephone';
-  status: 'in_progress' | 'completed';
+  status: 'draft' | 'in_progress' | 'completed';
   complaint: string;
+  symptoms?: string;
+  duration?: string;
   history: string;
   exam: string;
   assessment: string;
+  differentials?: string;
   plan: string;
   privateNotes: string;
+  savedAt?: string;
 }
 export interface BillingTransaction {
   id: string;
@@ -191,6 +252,8 @@ export const seedPatients: PatientClinical[] = [
       { name: 'Metformin', dose: '500 mg', frequency: 'Twice daily', since: 'Mar 2025' },
     ],
     alerts: [{ severity: 'warning', text: 'Penicillin allergy — avoid beta-lactams.' }],
+    address: '14 Lake View Road, New Delhi', emergencyContact: 'Priya Smith (spouse)', emergencyPhone: '+91 98100 22002',
+    highRisk: false, careTeam: ['Dr. Priya Nair', 'Nurse Anjali'],
     lastVisit: '02 Sep 2026', nextAppointment: '10 Sep 2026', consentStatus: 'granted',
     consentedScopes: ['basic', 'appointments', 'history', 'labs', 'imaging', 'prescriptions'],
     consentReason: 'Cardiology follow-up established under active care.',
@@ -198,9 +261,28 @@ export const seedPatients: PatientClinical[] = [
       { date: '02 Sep 2026', doctor: 'Dr. Priya Nair', action: 'Requested laboratory history', result: 'Approved by patient' },
       { date: '02 Sep 2026', doctor: 'Dr. Priya Nair', action: 'Viewed cardiac investigations', result: 'Approved by patient' },
     ],
+    diagnoses: [
+      { id: 'dx-1', name: 'Essential hypertension', status: 'active', since: '2021', icd: 'I10' },
+      { id: 'dx-2', name: 'Type 2 diabetes mellitus', status: 'active', since: '2023', icd: 'E11' },
+    ],
+    allergyRecords: [{ id: 'al-1', substance: 'Penicillin', type: 'drug', reaction: 'Urticaria', severity: 'moderate', verified: true }],
+    immunizations: [
+      { id: 'imm-1', vaccine: 'COVID-19 booster', dose: '3', date: '2025-11-12', status: 'complete' },
+      { id: 'imm-2', vaccine: 'Influenza', dose: '2025', date: '2025-10-02', status: 'due', nextDue: '2026-10-01' },
+    ],
+    surgeries: ['None documented'],
+    hospitalizations: ['None in the last 5 years'],
+    familyHistory: 'Father — hypertension; Mother — type 2 diabetes.',
+    socialHistory: 'Non-smoker. Occasional alcohol. Sedentary lifestyle.',
     vitals: [
-      { id: 'v-1', date: today(), time: '09:15', bp: '128/82', hr: 76, temp: '98.4°F', spo2: 98, rr: 16, weight: 68 },
-      { id: 'v-2', date: '2026-08-20', time: '10:30', bp: '134/88', hr: 80, temp: '98.6°F', spo2: 97, rr: 17, weight: 68 },
+      { id: 'v-1', date: today(), time: '09:15', bp: '128/82', hr: 76, temp: '98.4°F', spo2: 98, rr: 16, weight: 68, height: 172, bmi: 23.0, glucose: 118, source: 'nurse' },
+      { id: 'v-2', date: '2026-08-20', time: '10:30', bp: '134/88', hr: 80, temp: '98.6°F', spo2: 97, rr: 17, weight: 68, height: 172, bmi: 23.0, glucose: 132, source: 'doctor' },
+      { id: 'v-1b', date: '2026-07-18', time: '11:00', bp: '138/90', hr: 82, temp: '98.2°F', spo2: 97, rr: 16, weight: 69, height: 172, bmi: 23.3, glucose: 141, source: 'doctor' },
+      { id: 'v-1c', date: '2026-06-12', time: '09:40', bp: '142/92', hr: 84, temp: '98.5°F', spo2: 96, rr: 18, weight: 70, height: 172, bmi: 23.7, glucose: 148, source: 'hospital' },
+      { id: 'v-1d', date: '2026-04-04', time: '10:10', bp: '146/94', hr: 86, temp: '98.6°F', spo2: 96, rr: 18, weight: 71, height: 172, bmi: 24.0, glucose: 154, source: 'doctor' },
+    ],
+    ehrChangeRequests: [
+      { id: 'ecr-1', patientId: 'pat-1083', doctorId: 'doc-1001', field: 'Allergy — Penicillin reaction', originalValue: 'Unknown reaction', requestedValue: 'Urticaria', reason: 'Patient confirmed reaction type during visit.', status: 'approved', date: '2026-08-20', decidedAt: '2026-08-21' },
     ],
     notes: [
       { id: 'n-1', date: today(), kind: 'Clinical Note', title: 'Routine cardiac review', body: 'Stable on current therapy. Home BP log reviewed. Continue Telmisartan 40 mg and Metformin 500 mg.', status: 'signed' },
@@ -238,7 +320,17 @@ export const seedPatients: PatientClinical[] = [
     lastVisit: '30 Aug 2026', nextAppointment: '05 Sep 2026', consentStatus: 'pending',
     consentReason: 'Requested access to prior electrophysiology studies.',
     consentHistory: [{ date: '30 Aug 2026', doctor: 'Dr. Priya Nair', action: 'Requested electrophysiology history', result: 'Pending patient decision' }],
-    vitals: [{ id: 'v-3', date: '2026-08-30', time: '16:20', bp: '118/76', hr: 96, temp: '98.2°F', spo2: 99, rr: 15, weight: 59 }],
+    address: '88 Park Street, Noida', emergencyContact: 'Imran Khan (brother)', emergencyPhone: '+91 98100 33202',
+    highRisk: false, careTeam: ['Dr. Priya Nair'],
+    diagnoses: [{ id: 'dx-3', name: 'Atrial fibrillation', status: 'active', since: '2026', icd: 'I48.0' }],
+    allergyRecords: [],
+    immunizations: [{ id: 'imm-3', vaccine: 'COVID-19', dose: '2', date: '2024-04-10', status: 'complete' }],
+    familyHistory: 'No premature CAD.',
+    socialHistory: 'Non-smoker.',
+    vitals: [
+      { id: 'v-3', date: '2026-08-30', time: '16:20', bp: '118/76', hr: 96, temp: '98.2°F', spo2: 99, rr: 15, weight: 59, height: 162, bmi: 22.5, source: 'doctor' },
+      { id: 'v-3b', date: '2026-07-02', time: '15:10', bp: '122/78', hr: 108, temp: '98.4°F', spo2: 98, rr: 16, weight: 59, height: 162, bmi: 22.5, source: 'nurse' },
+    ],
     notes: [],
     prescriptions: [],
     labs: [
@@ -256,11 +348,30 @@ export const seedPatients: PatientClinical[] = [
       { severity: 'critical', text: 'Chest pain reported 20 minutes ago.' },
       { severity: 'warning', text: 'Aspirin allergy — use alternative antiplatelet.' },
     ],
+    address: '5 Civil Lines, Delhi', emergencyContact: 'Neha Verma (daughter)', emergencyPhone: '+91 98100 44301',
+    highRisk: true, careTeam: ['Dr. Priya Nair', 'Cath Lab on-call'],
     lastVisit: '28 Aug 2026', nextAppointment: '06 Sep 2026', consentStatus: 'granted',
     consentedScopes: ['basic', 'appointments', 'history', 'labs', 'imaging'],
     consentReason: 'Active cardiology care relationship.',
     consentHistory: [{ date: '28 Aug 2026', doctor: 'Dr. Priya Nair', action: 'Requested imaging history', result: 'Approved by patient' }],
-    vitals: [{ id: 'v-4', date: today(), time: '17:00', bp: '142/92', hr: 88, temp: '98.8°F', spo2: 96, rr: 18, weight: 84 }],
+    diagnoses: [
+      { id: 'dx-4', name: 'Coronary artery disease', status: 'active', since: '2024', icd: 'I25.1' },
+      { id: 'dx-5', name: 'Hypertension', status: 'active', since: '2018', icd: 'I10' },
+      { id: 'dx-6', name: 'Dyslipidemia', status: 'active', since: '2020', icd: 'E78.5' },
+    ],
+    allergyRecords: [
+      { id: 'al-2', substance: 'Aspirin', type: 'drug', reaction: 'Bronchospasm', severity: 'severe', verified: true },
+      { id: 'al-3', substance: 'Sulfonamides', type: 'drug', reaction: 'Rash', severity: 'moderate', verified: true },
+    ],
+    surgeries: ['None'],
+    hospitalizations: ['Chest pain observation — Aug 2026'],
+    familyHistory: 'Brother — MI at 52.',
+    socialHistory: 'Former smoker (quit 2019).',
+    vitals: [
+      { id: 'v-4', date: today(), time: '17:00', bp: '142/92', hr: 88, temp: '98.8°F', spo2: 96, rr: 18, weight: 84, height: 170, bmi: 29.1, source: 'nurse' },
+      { id: 'v-4b', date: '2026-08-28', time: '11:20', bp: '138/88', hr: 82, temp: '98.4°F', spo2: 97, rr: 16, weight: 84, height: 170, bmi: 29.1, source: 'doctor' },
+      { id: 'v-4c', date: '2026-07-10', time: '10:00', bp: '148/94', hr: 90, temp: '98.6°F', spo2: 95, rr: 18, weight: 85, height: 170, bmi: 29.4, source: 'hospital' },
+    ],
     notes: [],
     prescriptions: [],
     labs: [
@@ -309,7 +420,7 @@ export const seedPatients: PatientClinical[] = [
 
 export const seedConsultations: Consultation[] = [
   {
-    id: 'con-1', patientId: 'pat-1083', date: today(), start: '10:30', type: 'Follow-up', status: 'completed',
+    id: 'con-1', encounterId: 'ENC-2410', appointmentId: 'apt-13', patientId: 'pat-1083', date: today(), start: '10:30', type: 'Follow-up', status: 'completed',
     complaint: 'No new chest pain; reports mild fatigue.',
     history: 'Hypertension and type 2 diabetes well controlled in the last 2 months. Home BP average 128/80.',
     exam: 'BP 128/82, HR 76, SpO2 98%. Lungs clear. No peripheral edema.',
@@ -333,9 +444,14 @@ interface ClinicalWorkspaceState {
   consultations: Consultation[];
   billing: BillingTransaction[];
   selectedPatientId: string | null;
+  activeEncounterId: string | null;
   selectPatient: (id: string | null) => void;
+  startEncounter: (patientId: string, appointmentId?: string) => string;
   requestConsent: (patientId: string, reason: string, scopes: ConsentedScope[]) => void;
   respondConsent: (patientId: string, result: 'granted' | 'denied') => void;
+  emergencyAccess: (patientId: string, reason: string) => void;
+  requestEhrChange: (patientId: string, field: string, originalValue: string, requestedValue: string, reason: string) => void;
+  respondEhrChange: (id: string, result: 'approved' | 'rejected') => void;
   addVitals: (patientId: string, v: Omit<VitalsRecord, 'id'>) => void;
   addNote: (patientId: string, n: Omit<ClinicalNote, 'id' | 'date'>) => void;
   addPrescription: (patientId: string, p: Omit<Prescription, 'id' | 'patientId'>) => void;
@@ -346,6 +462,7 @@ interface ClinicalWorkspaceState {
   reviewImaging: (id: string, clinicalNote: string) => void;
   saveConsultation: (c: Omit<Consultation, 'id'>) => void;
   addBilling: (b: Omit<BillingTransaction, 'id'>) => void;
+  updateBillingStatus: (id: string, status: BillingTransaction['status']) => void;
 }
 
 const ClinicalContext = createContext<ClinicalWorkspaceState | null>(null);
@@ -362,6 +479,7 @@ export const ClinicalWorkspaceProvider: React.FC<{ children: React.ReactNode }> 
   const [consultations, setConsultations] = useState<Consultation[]>(seedConsultations);
   const [billing, setBilling] = useState<BillingTransaction[]>(seedBilling);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [activeEncounterId, setActiveEncounterId] = useState<string | null>(null);
 
   const audit = useCallback((action: Parameters<typeof addAuditEvent>[0]['action'], resourceId: string, patientId: string | null, detail?: string, outcome: 'success' | 'denied' | 'blocked' = 'success') => {
     addAuditEvent({ actorId: doctor.id, actorRole: 'DOCTOR', action, resourceId, resourceType: 'CLINICAL', patientId, detail, outcome });
@@ -371,7 +489,43 @@ export const ClinicalWorkspaceProvider: React.FC<{ children: React.ReactNode }> 
     setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, ...(typeof patch === 'function' ? patch(p) : patch) } : p)));
   }, []);
 
-  const selectPatient = useCallback((id: string | null) => setSelectedPatientId(id), []);
+  const selectPatient = useCallback((id: string | null) => {
+    setSelectedPatientId(id);
+    if (!id) setActiveEncounterId(null);
+  }, []);
+
+  const startEncounter = useCallback((patientId: string, appointmentId?: string) => {
+    const encounterId = `ENC-${Date.now().toString().slice(-6)}`;
+    setSelectedPatientId(patientId);
+    setActiveEncounterId(encounterId);
+    audit('ENCOUNTER_STARTED', encounterId, patientId, appointmentId || 'unscheduled');
+    return encounterId;
+  }, [audit]);
+
+  const emergencyAccess = useCallback((patientId: string, reason: string) => {
+    patchPatient(patientId, (p) => ({
+      consentStatus: p.consentStatus === 'granted' ? p.consentStatus : 'granted',
+      consentedScopes: ['basic', 'appointments', 'history', 'labs', 'imaging', 'prescriptions', 'documents'],
+      consentHistory: [{ date: today(), doctor: doctor.displayName, action: `Emergency access — ${reason}`, result: 'Break-glass access recorded' }, ...p.consentHistory],
+    }));
+    audit('EMERGENCY_ACCESS', patientId, patientId, reason);
+  }, [patchPatient, audit, doctor.displayName]);
+
+  const requestEhrChange = useCallback((patientId: string, field: string, originalValue: string, requestedValue: string, reason: string) => {
+    const req: EhrChangeRequest = {
+      id: `ecr-${Date.now()}`, patientId, doctorId: doctor.id, field, originalValue, requestedValue, reason, status: 'pending', date: today(),
+    };
+    patchPatient(patientId, (p) => ({ ehrChangeRequests: [req, ...(p.ehrChangeRequests || [])] }));
+    audit('EHR_CHANGE_REQUESTED', req.id, patientId, `${field}: ${originalValue} → ${requestedValue}`);
+  }, [patchPatient, audit, doctor.id]);
+
+  const respondEhrChange = useCallback((id: string, result: 'approved' | 'rejected') => {
+    setPatients((prev) => prev.map((p) => ({
+      ...p,
+      ehrChangeRequests: (p.ehrChangeRequests || []).map((r) => r.id === id ? { ...r, status: result, decidedAt: today() } : r),
+    })));
+    audit(result === 'approved' ? 'EHR_CHANGE_APPROVED' : 'EHR_CHANGE_REJECTED', id, null);
+  }, [audit]);
 
   const requestConsent = useCallback((patientId: string, reason: string, scopes: ConsentedScope[]) => {
     patchPatient(patientId, (p) => ({
@@ -442,15 +596,21 @@ export const ClinicalWorkspaceProvider: React.FC<{ children: React.ReactNode }> 
     audit('BILLING_CHANGED', id, b.patientId, `${b.service} ₹${b.amount}`);
   }, [audit]);
 
+  const updateBillingStatus = useCallback((id: string, status: BillingTransaction['status']) => {
+    setBilling((prev) => prev.map((b) => (b.id === id ? { ...b, status } : b)));
+    audit('BILLING_CHANGED', id, null, status);
+  }, [audit]);
+
   const value = useMemo<ClinicalWorkspaceState>(() => ({
-    patients, consultations, billing, selectedPatientId,
-    selectPatient, requestConsent, respondConsent, addVitals, addNote,
+    patients, consultations, billing, selectedPatientId, activeEncounterId,
+    selectPatient, startEncounter, requestConsent, respondConsent, emergencyAccess,
+    requestEhrChange, respondEhrChange, addVitals, addNote,
     addPrescription, updatePrescriptionStatus, addLabOrder, reviewLab,
-    addImaging, reviewImaging, saveConsultation, addBilling,
-  }), [patients, consultations, billing, selectedPatientId, selectPatient,
-    requestConsent, respondConsent, addVitals, addNote, addPrescription,
+    addImaging, reviewImaging, saveConsultation, addBilling, updateBillingStatus,
+  }), [patients, consultations, billing, selectedPatientId, activeEncounterId, selectPatient, startEncounter,
+    requestConsent, respondConsent, emergencyAccess, requestEhrChange, respondEhrChange, addVitals, addNote, addPrescription,
     updatePrescriptionStatus, addLabOrder, reviewLab, addImaging, reviewImaging,
-    saveConsultation, addBilling]);
+    saveConsultation, addBilling, updateBillingStatus]);
 
   return <ClinicalContext.Provider value={value}>{children}</ClinicalContext.Provider>;
 };
@@ -459,7 +619,7 @@ export const PATIENT_STATUS_LABEL: Record<PatientStatus, string> = {
   new: 'New', active: 'Active', follow_up: 'Follow-up', critical: 'Critical', pending_review: 'Pending Review',
 };
 export const CONSENT_LABEL: Record<ConsentStatus, string> = {
-  not_requested: 'Not requested', pending: 'Awaiting patient', granted: 'Consent granted', denied: 'Denied', expired: 'Expired',
+  not_requested: 'Not requested', pending: 'Awaiting patient', granted: 'Consent granted', denied: 'Denied', expired: 'Expired', revoked: 'Revoked',
 };
 export const LAB_STATUS_LABEL: Record<LabStatus, string> = {
   ordered: 'Ordered', collected: 'Collected', available: 'Available', reviewed: 'Reviewed',
@@ -468,5 +628,5 @@ export const IMAGING_STATUS_LABEL: Record<ImagingStatus, string> = {
   ordered: 'Ordered', available: 'Available', reviewed: 'Reviewed',
 };
 export const RX_STATUS_LABEL: Record<PrescriptionStatus, string> = {
-  draft: 'Draft', signed: 'Signed', sent_pharmacy: 'Sent to Pharmacy',
+  draft: 'Draft', pending_signature: 'Pending Signature', signed: 'Signed', issued: 'Issued', sent_pharmacy: 'Sent to Pharmacy', cancelled: 'Cancelled', expired: 'Expired',
 };
