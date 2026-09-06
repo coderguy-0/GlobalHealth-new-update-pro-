@@ -29,6 +29,8 @@ interface AIWorkspaceProps {
    * time the workspace actually becomes visible.
    */
   active?: boolean;
+  /** Public section the user came from (safe page context only). */
+  originTab?: string;
 }
 
 interface SendError {
@@ -77,7 +79,7 @@ function toErrorKind(err: unknown): { kind: AIErrorKind; message: string } {
  *    plus this user's own self-reported dashboard snapshot. No other
  *    account's data is ever reachable.
  */
-export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initialPrompt, onBack, onNavigate, onLogout, active = true }) => {
+export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initialPrompt, onBack, onNavigate, onLogout, active = true, originTab = 'home' }) => {
   const { user, requireAuth } = useAuth();
   const { activePatient, wellness, medicationReminders, appointments } = usePatientEhr();
   const isSignedIn = !!user;
@@ -433,8 +435,8 @@ export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initi
           prompt,
           currentLanguage,
           isSignedIn
-            ? { displayName: user!.fullName, mrn: activePatient.mrn, authenticated: true, systemContext, conversationHistory, personalHealthSnapshot }
-            : { authenticated: false, systemContext, conversationHistory },
+            ? { displayName: user!.fullName, mrn: activePatient.mrn, authenticated: true, systemContext, conversationHistory, personalHealthSnapshot, pageContext: { route: originTab } }
+            : { authenticated: false, systemContext, conversationHistory, pageContext: { route: originTab } },
           controller.signal
         );
         onDone(response);
@@ -447,7 +449,7 @@ export const AIWorkspace: React.FC<AIWorkspaceProps> = ({ currentLanguage, initi
         abortRef.current = null;
       }
     },
-    [currentLanguage, isSignedIn, user, activePatient.mrn, personalHealthSnapshot]
+    [currentLanguage, isSignedIn, user, activePatient.mrn, personalHealthSnapshot, originTab]
   );
 
   const handleSend = useCallback(

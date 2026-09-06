@@ -43,11 +43,12 @@ function nameMatches(name: string, text: string): boolean {
   // them verbatim. Require a strong fraction of significant (4+ char) tokens.
   // Ultra-generic clinical words are ignored so "blood" alone can never drag
   // in an unrelated entry (e.g. an arterial blood gas test for a BP question).
+  // Tokens must appear as WHOLE WORDS — "total" must never match "totally".
   const tokens = n
     .split(/[^a-z0-9]+/)
     .filter((t) => t.length >= 4 && !TOKEN_GENERIC_WORDS.has(t));
   if (!tokens.length) return false;
-  const found = tokens.filter((t) => text.includes(t)).length;
+  const found = tokens.filter((t) => new RegExp(`\\b${t}\\b`).test(text)).length;
   return found / tokens.length >= 0.5;
 }
 

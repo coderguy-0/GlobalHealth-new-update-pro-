@@ -258,6 +258,10 @@ export interface AssistantRequestContext {
    * appointments). The server treats it as self-reported, non-authoritative
    * context and drops it entirely for guests. */
   personalHealthSnapshot?: string;
+  /** Page-aware assistance: the public section key the user came from
+   * (e.g. "medicines"). The server resolves it against its published
+   * navigation knowledge; unknown keys are ignored. Never private. */
+  pageContext?: { route?: string };
 }
 
 /** Calls the Gemini-backed assistant endpoint with the signed-in caller's own

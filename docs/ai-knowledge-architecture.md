@@ -122,3 +122,56 @@ Deliberately **not** built in this iteration, to avoid overreach:
   integration is a data-acquisition task, not a code task.
 - **Streaming responses**: provider interface returns complete text today;
   streaming slots in behind `generateText` without UI contract changes.
+
+## 7. Public-website ingestion layer (complete public knowledge)
+
+The AI's knowledge equals the PUBLIC website — not the database, not the
+backend, not the repository (spec: PUBLIC KNOWLEDGE = YES, PRIVATE = NO).
+
+### 7.1 Machine-readable route inventory
+
+`src/core/ai/knowledge/ghPublicRoutes.ts` inventories EVERY route from
+`App.tsx VALID_TABS`, classified by real access behavior (PROTECTED_TABS /
+OVERLAY_TABS): 19 PUBLIC (indexable), 4 AUTHENTICATED and 9 ROLE_PROTECTED
+(excluded with reasons). A unit test asserts the inventory covers every real
+route exactly once and that classification matches the app's actual
+protection — fail-closed (unknown ⇒ not indexed).
+
+### 7.2 Unified public content index
+
+`src/core/ai/knowledge/ghPublicIndex.ts` indexes 1,200+ public documents from
+the canonical datasets the website itself renders, using explicit per-type
+FIELD WHITELISTS (private fields cannot leak by construction) and a fail-closed
+gate (`PUBLIC` access + `PUBLISHED` status only):
+
+| Type | Count | Source |
+|---|---|---|
+| HEALTH_TOOL | 80 | calculatorsData |
+| RECIPE | 1000 | recipes library |
+| NUTRITION | 7 | guidelines / deficiency / meal plans |
+| WELLNESS / EXERCISE / WORKOUT | 18 | wellnessFitnessData |
+| MAP_LOCATION | 75 | medicalMapData |
+| COMMUNITY_POST | 5 | labeled COMMUNITY CONTENT |
+| NEWS | published only | drafts excluded + counted |
+| HELP_ARTICLE / POLICY | 10 | real how-to + real Terms/Privacy sections |
+
+Plus the existing layers: clinical libraries (medicines/diseases/tests via
+`aiKnowledge.ts`) and live directories (doctors/hospitals/pharmacy stock via
+`ghDirectory.ts`), composed by `ghPublicSearch.ts` into one labeled,
+source-attributed context block with the knowledge-priority rule.
+
+### 7.3 Page-aware assistance
+
+The workspace sends the public section key the user came from
+(`userContext.pageContext.route`). The server resolves it against the
+published navigation knowledge; unknown keys are ignored. This lets the
+assistant resolve "this page / this section" honestly.
+
+### 7.4 Completeness & security reports
+
+- `npm run ai:report` — prints the full ledger: routes, indexed counts per
+  type, clinical/directory layers, and everything excluded with reasons.
+- Security tests prove: private field names never appear in indexed docs,
+  draft news is never indexed, unknown classifications never pass the gate,
+  protected routes are never indexable, and unmatched queries produce empty
+  context (never fabricated content).

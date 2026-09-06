@@ -143,7 +143,32 @@ function productSnippet(p: DirectoryProduct): DirectoryHit {
 // Strong single-token identity: one distinctive word (e.g. "paracetamol",
 // "cetirizine") is enough to identify a product users refer to generically.
 const strongTokenMatch = (name: string, text: string): boolean =>
-  nameTokens(name).some((t) => t.length >= 5 && text.includes(t));
+  nameTokens(name).some((t) => t.length >= 5 && new RegExp(`\\b${t}\\b`).test(text));
+
+// Layman specialist names → the specialty words real directory records use
+// (spec §76: query normalization, e.g. "cardiologist" → cardiology). Only
+// expands the search text; it never changes what the data says.
+const SPECIALTY_ALIASES: Record<string, string[]> = {
+  cardiologist: ['cardiology', 'cardiothoracic', 'cardiac', 'heart'],
+  'heart doctor': ['cardiology', 'cardiothoracic', 'cardiac', 'heart'],
+  neurologist: ['neurology', 'neuro', 'brain', 'stroke'],
+  dermatologist: ['dermatology', 'skin'],
+  pediatrician: ['pediatric', 'paediatric', 'child'],
+  oncologist: ['oncology', 'cancer'],
+  orthopedic: ['orthopedics', 'orthopaedics', 'bone', 'joint'],
+  gynecologist: ['gynecology', 'gynaecology', 'obstetric'],
+  'kidney doctor': ['nephrology', 'renal', 'kidney'],
+  urologist: ['urology', 'urinary'],
+  'ent specialist': ['ent', 'ear', 'nose', 'throat'],
+};
+
+function expandSpecialties(text: string): string {
+  let out = text;
+  for (const [phrase, aliases] of Object.entries(SPECIALTY_ALIASES)) {
+    if (out.includes(phrase)) out = `${out} ${aliases.join(' ')}`;
+  }
+  return out;
+}
 
 const matches = (haystack: string, text: string): boolean => {
   const n = haystack.trim().toLowerCase();
@@ -164,7 +189,9 @@ const nameTokens = (name: string): string[] =>
 const nameIdentityMatch = (name: string, text: string): boolean => {
   const tokens = nameTokens(name);
   if (!tokens.length) return false;
-  const found = tokens.filter((t) => text.includes(t)).length;
+  // Whole-word matching only — partial overlaps inside longer words do not
+  // count as identity.
+  const found = tokens.filter((t) => new RegExp(`\\b${t}\\b`).test(text)).length;
   return found / tokens.length >= 0.6;
 };
 
@@ -178,7 +205,7 @@ export function retrieveDirectoryKnowledge(
   catalog: DirectoryCatalog | null | undefined
 ): DirectoryHit[] {
   if (!catalog) return [];
-  const expanded = expandQueryWithAliases(String(text || ''));
+  const expanded = expandSpecialties(expandQueryWithAliases(String(text || '')));
   const textLower = expanded.toLowerCase();
   const hits: DirectoryHit[] = [];
 
@@ -186,7 +213,10 @@ export function retrieveDirectoryKnowledge(
     if (hits.length >= maxHits) break;
     const specialty = clean(d.specialty, 80);
     const nameHit = nameIdentityMatch(d.name, textLower);
-    const specialtyHit = specialty.length > 3 && textLower.includes(specialty.toLowerCase());
+    // Specialty matches in full or through a distinctive specialty word
+    // ("cardiologist" expands to cardiology/cardiothoracic via aliases).
+    const specialtyHit =
+      specialty.length > 3 && (textLower.includes(specialty.toLowerCase()) || strongTokenMatch(specialty, textLower));
     if (!nameHit && !specialtyHit) continue;
     if (hits.some((h) => h.name === d.name)) continue;
     hits.push(doctorSnippet(d));

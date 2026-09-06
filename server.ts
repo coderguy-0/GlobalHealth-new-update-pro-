@@ -11,9 +11,9 @@ import { PHARMACY_PRODUCTS, VERIFIED_PHARMACY_PARTNERS } from './src/data/pharma
 import { INITIAL_HOSPITALS, INITIAL_DEPARTMENTS, INITIAL_PORTAL_DOCTORS, INITIAL_BLOOD_BANK } from './src/data/hospitalInitialData';
 import { detectSafetyRisk } from './src/core/ai/aiSafety';
 import { retrieveVerifiedKnowledge } from './src/core/ai/aiKnowledge';
-import { GH_OVERVIEW, buildWebsiteNavigationContext } from './src/core/ai/knowledge/ghWebsiteKnowledge';
+import { GH_OVERVIEW, buildWebsiteNavigationContext, publishedNavigation } from './src/core/ai/knowledge/ghWebsiteKnowledge';
 import { buildPolicyBlock } from './src/core/ai/knowledge/ghPolicies';
-import { retrieveDirectoryKnowledge } from './src/core/ai/knowledge/ghDirectory';
+import { retrievePublicKnowledge } from './src/core/ai/knowledge/ghPublicSearch';
 import { createAiProvider, AiProviderError } from './src/server/aiProvider';
 import { buildAuthorizedRecordSummary } from './src/core/ai/aiUserContext';
 import { loadRuntimeConfig } from './src/server/config';
@@ -8075,23 +8075,17 @@ Request ID: ${requestId}`,
       // source label + only matched facts so it never needs to invent facts
       // about a medicine/condition/lab test the platform already has content
       // for.
-      const knowledge = retrieveVerifiedKnowledge(String(prompt || ''), 3);
-      // Live platform directory retrieval (doctors / hospitals / verified
-      // pharmacy partner stock). Real application data only — the assistant
-      // reports stock and availability exactly as the data states it.
-      const directoryHits = retrieveDirectoryKnowledge(String(prompt || ''), 3, {
-        doctors: INITIAL_PORTAL_DOCTORS,
-        hospitals: INITIAL_HOSPITALS,
-        pharmacyProducts: PHARMACY_PRODUCTS,
+      // Unified PUBLIC knowledge retrieval (complete public website):
+      // verified clinical libraries + live directories + public content index
+      // (health tools, recipes, nutrition, wellness, map, community, news,
+      // help, policies) — one labeled, source-attributed context block.
+      const publicKnowledge = retrievePublicKnowledge(String(prompt || ''), {
+        directoryCatalog: {
+          doctors: INITIAL_PORTAL_DOCTORS,
+          hospitals: INITIAL_HOSPITALS,
+          pharmacyProducts: PHARMACY_PRODUCTS,
+        },
       });
-      const directoryContext = directoryHits.length
-        ? `\nLIVE GLOBALHEALTH DIRECTORY DATA (retrieved ${new Date().toISOString().slice(0, 10)} — report every value exactly as shown here; never upgrade stock, availability or status):\n${directoryHits
-            .map(
-              (h, i) =>
-                `${i + 1}. [${h.source}] ${h.name}${h.entityId ? ` (id: ${h.entityId})` : ''} — ${h.summary}${h.details ? ` — ${h.details}` : ''}`
-            )
-            .join('\n')}`
-        : '';
 
       const langInstruction = language && language !== 'English' ? ` Please respond in ${language}.` : '';
 
@@ -8142,9 +8136,21 @@ Request ID: ${requestId}`,
         identityInstruction = ` The visitor is not signed in. You have NO access to anyone's private health records, appointments, saved items, messages or account information — never access, reference or imply otherwise. If they ask about personal information, explain that personal answers require signing in to their own GlobalHealth account, and offer general educational help instead.`;
       }
 
+      // Page-aware assistance (spec §33): the client shares only the route key
+      // of the section the user came from. It is resolved against the
+      // published navigation knowledge — unknown keys are ignored.
+      const ctxPage = cleanCtx((userContext as any)?.pageContext?.route, 40)
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '');
+      const pageRecord = ctxPage ? publishedNavigation().find((r) => r.tab === ctxPage) : null;
+      const pageContextBlock = pageRecord
+        ? `\nPAGE CONTEXT (non-authoritative): the user recently visited the "${pageRecord.title}" section of GlobalHealth (route: ${pageRecord.tab}). When they say "this page" or "this section", they most likely mean that section, which is described as: ${pageRecord.summary}`
+        : '';
+
       const systemInstruction = `You are GlobalHealth AI — the official intelligent assistant of the GlobalHealth healthcare platform.
 ROLE: a trustworthy healthcare information and navigation assistant operating INSIDE GlobalHealth. You are NOT a doctor, emergency service, pharmacist, diagnostician, or substitute for a qualified healthcare professional — and you never pretend you have performed an examination, laboratory test, imaging study, diagnosis, or clinician consultation.
 PURPOSE: help users understand, navigate, search, discover and safely interact with GlobalHealth, and learn health information safely.
+GROUNDING: you are grounded in the complete PUBLIC GlobalHealth website — its real sections, its public content libraries (diseases, medicines, lab tests, recipes, nutrition, wellness, health tools, news, community, medical map), verified doctor/hospital directories, verified pharmacy partner listings, help articles and public policies — plus live application data supplied in this prompt. For anything not in that public scope, say it could not be verified.
 ${GH_OVERVIEW}
 YOUR MODES: (A) WEBSITE ASSISTANT — explain how GlobalHealth works; (B) HEALTH EDUCATION — explain general health concepts in simple language, always separated from personal medical advice; (C) HEALTHCARE DISCOVERY — help find doctors, hospitals, medicines, lab tests, pharmacies, articles and map results inside GlobalHealth; (D) PERSONAL ACCOUNT ASSISTANT — work ONLY with the authenticated caller's own authorized data supplied in this prompt; (E) NAVIGATION ASSISTANT — guide users to real sections using ACTION → LOCATION → NEXT STEP; (F) SAFETY ASSISTANT — recognize possible emergencies and redirect to immediate professional help.
 ${buildWebsiteNavigationContext()}
@@ -8159,7 +8165,7 @@ SAFETY RULES (never violate):
 - Laboratory interpretation: reference intervals vary by laboratory, method, population and clinical context — prefer the reference range shown on the user's own report, never treat a range as universal, and never diagnose from a single result.
 ${buildPolicyBlock()}${langInstruction}${identityInstruction}${
         ctxSystem ? `\nPLATFORM CONTEXT GUIDANCE (non-authoritative, from GlobalHealth's understanding layer): ${ctxSystem}` : ''
-      }${knowledge.context}${directoryContext}${ctxHistory ? `\nCURRENT CONVERSATION HISTORY (recent, for continuity and reference resolution):\n${ctxHistory}\nUse this only to understand the user's current thread. Never repeat earlier answers verbatim.` : ''}`;
+      }${publicKnowledge.context}${pageContextBlock}${ctxHistory ? `\nCURRENT CONVERSATION HISTORY (recent, for continuity and reference resolution):\n${ctxHistory}\nUse this only to understand the user's current thread. Never repeat earlier answers verbatim.` : ''}`;
 
       // Provider abstraction (model independence): the assistant talks to the
       // provider interface, never to a specific SDK. The key never leaves

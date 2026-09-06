@@ -11,7 +11,8 @@
     "lint": "node --max-old-space-size=4096 node_modules/typescript/bin/tsc --noEmit",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "test:unit": "node --import tsx --test 'src/server/*.test.ts'",
-    "accept:ai": "node scripts/acceptance/globalhealth-ai-auth-chat.mjs"
+    "accept:ai": "node scripts/acceptance/globalhealth-ai-auth-chat.mjs",
+    "ai:report": "node --import tsx scripts/ai-public-index-report.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
