@@ -15,9 +15,10 @@
 import { ALL_400_MEDICINES } from '../../data/medicines/index';
 import { ALL_DISEASES } from '../../data/diseases/diseaseIndex';
 import { ALL_1000_MEDICAL_TESTS } from '../../data/medicalTests/index';
+import { expandQueryWithAliases } from './knowledge/ghAliases';
 
 export interface KnowledgeSource {
-  kind: 'medicine' | 'disease' | 'test';
+  kind: 'medicine' | 'disease' | 'test' | 'doctor' | 'hospital' | 'pharmacy-product';
   name: string;
   source: string;
   summary: string;
@@ -35,8 +36,25 @@ const MAX_HITS = 3;
 function nameMatches(name: string, text: string): boolean {
   const n = name.trim().toLowerCase();
   if (!n || n.length < 3) return false;
-  return text.includes(n);
+  // Full-phrase containment first (exact, precise).
+  if (text.includes(n)) return true;
+  // Then token-aware matching: real platform names are multi-word
+  // ("Essential hypertension", "Paracetamol IP 650mg") and users rarely type
+  // them verbatim. Require a strong fraction of significant (4+ char) tokens.
+  // Ultra-generic clinical words are ignored so "blood" alone can never drag
+  // in an unrelated entry (e.g. an arterial blood gas test for a BP question).
+  const tokens = n
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 4 && !TOKEN_GENERIC_WORDS.has(t));
+  if (!tokens.length) return false;
+  const found = tokens.filter((t) => text.includes(t)).length;
+  return found / tokens.length >= 0.5;
 }
+
+// Words so common in clinical naming that they carry almost no identity.
+const TOKEN_GENERIC_WORDS = new Set([
+  'blood', 'test', 'tests', 'profile', 'panel', 'level', 'levels', 'function', 'general', 'complete', 'disease', 'disorder', 'infection',
+]);
 
 function medicineSnippet(m: (typeof ALL_400_MEDICINES)[number]): KnowledgeSource {
   const details = [
@@ -95,7 +113,10 @@ function testSnippet(t: (typeof ALL_1000_MEDICAL_TESTS)[number]): KnowledgeSourc
 }
 
 export function retrieveVerifiedKnowledge(text: string, maxHits = MAX_HITS): KnowledgeResult {
-  const clean = String(text || '').toLowerCase();
+  // Alias-aware retrieval (spec §96): layman phrases ("heart attack") are
+  // expanded with their clinical terms ("myocardial infarction") BEFORE
+  // matching, so verified content is found without weakening exact matching.
+  const clean = expandQueryWithAliases(String(text || '')).toLowerCase();
   const hits: KnowledgeSource[] = [];
   const seen = new Set<string>();
 
@@ -128,10 +149,11 @@ export function retrieveVerifiedKnowledge(text: string, maxHits = MAX_HITS): Kno
   }
 
   const limited = hits.slice(0, maxHits);
+  const retrievedAt = new Date().toISOString().slice(0, 10);
   const context = limited.length
-    ? `\nVERIFIED GLOBALHEALTH PLATFORM DATA FOUND:\n${limited
+    ? `\nVERIFIED GLOBALHEALTH PLATFORM DATA FOUND (retrieved ${retrievedAt}):\n${limited
         .map((h, i) => `${i + 1}. [${h.source}] ${h.name} — ${h.summary} ${h.details}`.trim())
-        .join('\n')}\nOnly use the details above for verified claims. If the user asks about availability, price, dosage for their body, or anything not in this verified block, clearly state that you do not have verified information.`
+        .join('\n')}\nOnly use the details above for verified claims, and attribute them ("GlobalHealth currently shows…"). If the user asks about availability, price, dosage for their body, or anything not in this verified block, clearly state that you do not have verified information.`
     : 'No verified GlobalHealth clinical record was matched for this query. If asked for specific medicine availability, price, doctor/hospital availability or personal results, explicitly state that you do not have verified information instead of inventing it.';
 
   return { hits: limited, context };

@@ -77,16 +77,48 @@ const ACTION_RULES: ActionRule[] = [
     patterns: [/doctor/i, /physician/i, /specialist/i, /consult/i, /general practitioner/i, /\bgp\b/i],
   },
   {
+    card: { id: 'act-hospitals', label: 'Find Hospitals', tab: 'hospitals' },
+    patterns: [/hospital/i, /multispecialty/i, /emergency department/i, /icu/i],
+  },
+  {
     card: { id: 'act-map', label: 'Open Medical Map', tab: 'medical-map' },
-    patterns: [/hospital/i, /medical map/i, /blood bank/i, /clinic/i, /emergency department/i, /near me/i],
+    patterns: [/medical map/i, /blood bank/i, /clinic/i, /near me/i, /nearby/i, /directions/i],
   },
   {
     card: { id: 'act-pharmacy', label: 'Explore Verified Pharmacy Partners', tab: 'pharmacy-portal' },
-    patterns: [/pharmacy/i, /chemist/i, /medication near/i, /buy medicine/i],
+    patterns: [/pharmacy/i, /chemist/i, /medication near/i, /buy medicine/i, /stock/i],
   },
   {
     card: { id: 'act-community', label: 'Open Community', tab: 'community' },
     patterns: [/community/i, /support group/i, /forum/i, /peer/i, /talk to others/i],
+  },
+  {
+    card: { id: 'act-appointments', label: 'My Appointments', tab: 'appointments' },
+    patterns: [/appointment/i, /booking/i, /reschedul/i, /checkup/i, /\bvisit\b/i],
+  },
+  {
+    card: { id: 'act-dashboard', label: 'Health Dashboard', tab: 'dashboard' },
+    patterns: [/dashboard/i, /health record/i, /\behr\b/i, /my record/i, /saved/i],
+  },
+  {
+    card: { id: 'act-nutrition', label: 'Explore Nutrition', tab: 'nutrition' },
+    patterns: [/nutrition/i, /\bdiet\b/i, /vitamin/i, /healthy eating/i, /nutrient/i],
+  },
+  {
+    card: { id: 'act-recipes', label: 'Explore Recipes', tab: 'recipes' },
+    patterns: [/recipe/i, /\bmeal\b/i, /cook/i, /meal plan/i],
+  },
+  {
+    card: { id: 'act-wellness', label: 'Wellness & Fitness', tab: 'wellness' },
+    patterns: [/wellness/i, /fitness/i, /exercise/i, /workout/i, /\bsleep\b/i, /\bstress\b/i, /yoga/i],
+  },
+  {
+    card: { id: 'act-calculators', label: 'Health Tools', tab: 'calculators' },
+    patterns: [/calculator/i, /health tool/i, /\bbmi\b/i, /calorie/i, /due date/i],
+  },
+  {
+    card: { id: 'act-news', label: 'Health News', tab: 'news' },
+    patterns: [/\bnews\b/i, /article/i, /headline/i, /outbreak/i, /health update/i],
   },
 ];
 

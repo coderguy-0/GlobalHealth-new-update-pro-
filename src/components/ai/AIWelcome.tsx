@@ -35,12 +35,12 @@ export const AIWelcome: React.FC<AIWelcomeProps> = ({ onPrompt, signedIn, displa
       <div className="flex flex-col items-center text-center">
         <AIAvatar size={72} showStatus />
         <h2 className="mt-4 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-          Meet Your GlobalHealth AI
+          GlobalHealth AI
         </h2>
         <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-600">
           {signedIn
-            ? `Hi ${firstName} — I can answer general health questions, navigate you across GlobalHealth, and read back the labs, vitals, medications and appointments on your own record when you ask.`
-            : 'I can answer general health and wellness questions and help you find your way around GlobalHealth. Sign in to ask about your own private health record.'}
+            ? `Hi, I'm your GlobalHealth AI assistant. I can help you navigate the platform, explain health information, and read back the labs, vitals, medications and appointments on your own record when you ask, ${firstName}.`
+            : 'Hi, I\'m your GlobalHealth AI assistant. I can answer general health questions and help you find doctors, medicines, hospitals, lab tests and your way around GlobalHealth. Sign in to ask about your own private health information.'}
         </p>
       </div>
 

@@ -197,3 +197,11 @@ browser.**
 - Urgent-symptom safety screening, rate limiting, verified-knowledge retrieval
   (medicines/diseases/tests), and the educational-only framing rules are
   unchanged and apply to every caller.
+
+## 10. Knowledge layer & model provider
+
+The assistant's knowledge architecture (website knowledge records, alias
+expansion, live directory retrieval with strict stock truthfulness, policy
+fragments, content status/versioning, and the model-provider abstraction) is
+documented in **`docs/ai-knowledge-architecture.md`**. Configuration knobs:
+`AI_PROVIDER` (default `gemini`) and `AI_MODEL` (default `gemini-2.5-flash`).
