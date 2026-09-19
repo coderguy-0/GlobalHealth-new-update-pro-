@@ -24,6 +24,7 @@ import { loadDiseases, loadMedicines, loadMedicalTests } from '../data/catalogLo
 import { useCatalog } from '../lib/useCatalog';
 import { Button } from './ui/Button';
 import { SearchSkeleton } from './ui/Skeleton';
+import { CountUp } from './enhancements/CountUp';
 
 interface HeroSectionProps {
   onTabChange: (tab: NavigationTab) => void;
@@ -409,7 +410,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onTabChange }) => {
               {[
                 {
                   id: 'stat-diseases',
-                  title: '500+ Conditions',
+                  value: 500,
+                  suffix: '+',
+                  title: 'Conditions',
                   subtitle: 'ICD-10 clinical disease guides',
                   icon: <Activity className="h-5 w-5 text-rose-600" />,
                   bg: 'bg-rose-50 border-rose-100/80',
@@ -417,7 +420,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onTabChange }) => {
                 },
                 {
                   id: 'stat-medicines',
-                  title: '400+ Medicines',
+                  value: 400,
+                  suffix: '+',
+                  title: 'Medicines',
                   subtitle: 'Dosing, safety & interactions',
                   icon: <Pill className="h-5 w-5 text-emerald-600" />,
                   bg: 'bg-emerald-50 border-emerald-100/80',
@@ -425,7 +430,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onTabChange }) => {
                 },
                 {
                   id: 'stat-tests',
-                  title: '1,000+ Lab Tests',
+                  value: 1000,
+                  suffix: '+',
+                  title: 'Lab Tests',
                   subtitle: 'Clinical reference & prep guidelines',
                   icon: <FlaskConical className="h-5 w-5 text-sky-600" />,
                   bg: 'bg-sky-50 border-sky-100/80',
@@ -433,6 +440,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onTabChange }) => {
                 },
                 {
                   id: 'stat-facilities',
+                  value: 14237,
+                  suffix: '',
                   title: 'Verified Facilities',
                   subtitle: 'Hospitals, ICU beds & blood bank map',
                   icon: <Building2 className="h-5 w-5 text-indigo-600" />,
@@ -444,15 +453,16 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onTabChange }) => {
                   key={item.id}
                   type="button"
                   onClick={() => onTabChange(item.tab)}
-                  className="group flex flex-col items-center justify-center rounded-3xl border border-slate-200/90 bg-white/95 p-5 sm:p-6 text-center shadow-soft backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:border-medical-300 hover:shadow-card"
+                  className="group flex flex-col items-center justify-center rounded-3xl border border-slate-200/90 bg-white/95 p-5 sm:p-6 text-center shadow-soft backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:border-medical-300 hover:shadow-card dark:border-slate-700/70 dark:bg-slate-900/70"
                 >
                   <span className={`grid h-12 w-12 place-items-center rounded-2xl border transition group-hover:scale-105 ${item.bg}`}>
                     {item.icon}
                   </span>
-                  <p className="mt-3.5 text-sm sm:text-base font-extrabold text-slate-900 group-hover:text-medical-800">
-                    {item.title}
+                  <p className="mt-3 text-base sm:text-lg font-extrabold text-slate-900 group-hover:text-medical-800 dark:text-slate-100">
+                    <CountUp end={item.value} suffix={item.suffix} className="tabular-nums" />{' '}
+                    <span className="text-sm sm:text-base font-bold text-slate-700 dark:text-slate-300">{item.title}</span>
                   </p>
-                  <p className="mt-1 text-xs text-slate-500 leading-snug">{item.subtitle}</p>
+                  <p className="mt-1 text-xs text-slate-500 leading-snug dark:text-slate-400">{item.subtitle}</p>
                 </button>
               ))}
             </div>

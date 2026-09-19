@@ -184,6 +184,75 @@ export const Footer: React.FC<FooterProps> = ({ onTabChange }) => {
           </nav>
         </div>
 
+        {/* Newsletter — verified clinical bulletins, no marketing noise */}
+        <div className="mt-14 rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900/80 to-medical-950/40 p-6 sm:p-8">
+          <div className="grid items-center gap-6 lg:grid-cols-[1.1fr_1fr]">
+            <div>
+              <p className="inline-flex items-center gap-2 rounded-full border border-medical-800/60 bg-medical-950/60 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-medical-300">
+                <Activity className="h-3 w-3" />
+                Weekly Clinical Digest
+              </p>
+              <h3 className="mt-3 text-lg font-extrabold text-white sm:text-xl">
+                Verified health updates, straight to your inbox
+              </h3>
+              <p className="mt-2 max-w-md text-[13px] leading-relaxed text-slate-400">
+                New drug approvals, guideline changes, lab-test reference updates and outbreak advisories —
+                curated by our editorial board. No advertising, no third-party sharing, unsubscribe in one click.
+              </p>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const input = e.currentTarget.querySelector<HTMLInputElement>('input[type="email"]');
+                const email = input?.value?.trim() ?? '';
+                if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                  window.dispatchEvent(
+                    new CustomEvent('gh:toast-dispatch', {
+                      detail: { variant: 'error', title: 'Check your email address', description: 'Please enter a valid email so we can send your confirmation.' },
+                    })
+                  );
+                  return;
+                }
+                window.dispatchEvent(
+                  new CustomEvent('gh:toast-dispatch', {
+                    detail: { variant: 'success', title: 'Subscription confirmed', description: 'Your first clinical digest arrives next Tuesday.' },
+                  })
+                );
+                e.currentTarget.reset();
+              }}
+              className="w-full"
+            >
+              <label htmlFor="gh-newsletter-email" className="sr-only">
+                Email address
+              </label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="relative flex-1">
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  <input
+                    id="gh-newsletter-email"
+                    type="email"
+                    required
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950/70 py-2.5 pl-9 pr-3 text-[13px] text-white outline-none transition placeholder:text-slate-500 focus:border-medical-500 focus:ring-2 focus:ring-medical-500/25"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="shrink-0 rounded-xl bg-medical-600 px-5 py-2.5 text-[13px] font-bold text-white shadow-sm transition hover:bg-medical-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-medical-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+                >
+                  Subscribe
+                </button>
+              </div>
+              <p className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500">
+                <ShieldCheck className="h-3 w-3 text-emerald-500" />
+                We never share your address. Read our privacy commitment.
+              </p>
+            </form>
+          </div>
+        </div>
+
         {/* Symmetric Centered Bottom Bar */}
         <div className="mt-14 border-t border-slate-800/80 pt-8 flex flex-col items-center justify-between gap-4 text-center sm:flex-row">
           <p className="text-[11px] text-slate-500">

@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="GlobalHealth">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2f6a85"/>
+      <stop offset="0.55" stop-color="#0f766e"/>
+      <stop offset="1" stop-color="#059669"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.28" cy="0.22" r="0.9">
+      <stop stop-color="#ffffff" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#020617" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <!-- Rounded app tile -->
+  <rect x="0" y="0" width="512" height="512" rx="116" fill="url(#bg)"/>
+  <rect x="0" y="0" width="512" height="512" rx="116" fill="url(#glow)"/>
+
+  <!-- Globe meridians -->
+  <g stroke="#ffffff" stroke-opacity="0.24" stroke-width="8" fill="none">
+    <circle cx="256" cy="256" r="176"/>
+    <ellipse cx="256" cy="256" rx="86" ry="176"/>
+    <path d="M88 196h336M88 316h336"/>
+  </g>
+
+  <!-- Vital heartbeat line across the globe -->
+  <path
+    d="M104 262h58l30-58 42 116 34-84 26 44h114"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="26"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    filter="url(#soft)"
+  />
+
+  <!-- Heart accent -->
+  <path
+    d="M256 396c-6-5-52-34-70-58-15-20-14-47 3-62 16-15 41-14 56 2l11 11 11-11c15-16 40-17 56-2 17 15 18 42 3 62-18 24-64 53-70 58z"
+    fill="#ffffff"
+    fill-opacity="0.16"
+  />
+</svg>

@@ -22,6 +22,9 @@ import { TERMS_VERSION } from './lib/policyVersions';
 import { newsAuthService } from './services/newsAuthService';
 import { CommandPalette } from './components/CommandPalette';
 import { EmergencyModal } from './components/EmergencyModal';
+import { ScrollProgress } from './components/enhancements/ScrollProgress';
+import { BackToTop } from './components/enhancements/BackToTop';
+import { QuickActionsDock } from './components/enhancements/QuickActionsDock';
 
 // Heavy workspaces (portals, CMS, health-records suite) are code-split so the
 // public homepage never downloads them until a visitor actually opens one.
@@ -414,6 +417,20 @@ export default function App() {
     return () => window.removeEventListener('gh:open-command-palette', handleOpenCmd);
   }, []);
 
+  // `#emergency` is a shareable deep-link that raises the emergency panel
+  // directly — used by the installed-app shortcut and by any shared URL, so a
+  // person in a hurry never has to hunt through navigation.
+  useEffect(() => {
+    const openIfEmergency = () => {
+      if (window.location.hash.replace(/^#\/?/, '').split('?')[0] === 'emergency') {
+        setEmergencyModalOpen(true);
+      }
+    };
+    openIfEmergency();
+    window.addEventListener('hashchange', openIfEmergency);
+    return () => window.removeEventListener('hashchange', openIfEmergency);
+  }, []);
+
   // Re-lock the News Management workspace whenever the visitor leaves it, so
   // opening the portal again always starts at the editorial sign-in.
   useEffect(() => {
@@ -796,11 +813,22 @@ export default function App() {
 
   return (
     <div 
-      className="flex min-h-screen flex-col bg-white text-slate-900 antialiased font-sans transition-opacity duration-150"
+      className="flex min-h-screen flex-col bg-white text-slate-900 antialiased font-sans transition-opacity duration-150 dark:bg-slate-950 dark:text-slate-100"
       dir={direction}
     >
+      {/* Reading progress indicator — reflects scroll position across the page. */}
+      <ScrollProgress />
+
+      {/* Keyboard users can jump straight past the navigation chrome. */}
+      <a
+        href="#gh-main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[90] focus:rounded-xl focus:bg-medical-600 focus:px-4 focus:py-2.5 focus:text-sm focus:font-bold focus:text-white focus:shadow-lift"
+      >
+        Skip to main content
+      </a>
+
       {/* Top Announcement Strip Disclaimer */}
-      <div className="bg-slate-50 border-b border-slate-200/80 py-1.5 px-4">
+      <div className="bg-slate-50 border-b border-slate-200/80 py-1.5 px-4 dark:bg-slate-900/60 dark:border-slate-800">
         <div className="mx-auto max-w-7xl">
           <MedicalDisclaimer compact />
         </div>
@@ -825,7 +853,7 @@ export default function App() {
       />
 
       {/* Primary Main View Container — stays mounted under overlays */}
-      <main className="flex-1">
+      <main id="gh-main-content" tabIndex={-1} className="flex-1 outline-none">
         {/* One route-level Suspense boundary: every lazily code-split view below
             resolves through this fallback. */}
         <Suspense fallback={<RouteFallback />}>
@@ -1146,6 +1174,21 @@ export default function App() {
         open={emergencyModalOpen}
         onClose={() => setEmergencyModalOpen(false)}
       />
+
+      {/* Floating quick-actions dock (emergency · AI · share) — hidden while a
+          fullscreen portal workspace is open so it never occludes clinical UIs. */}
+      {!overlayTab && (
+        <QuickActionsDock
+          onOpenAI={() => {
+            setAiInitialPrompt(undefined);
+            setCurrentTab('ai-assistant');
+          }}
+          onOpenEmergency={() => setEmergencyModalOpen(true)}
+        />
+      )}
+
+      {/* Scroll-to-top affordance, shown after the visitor scrolls past the fold. */}
+      <BackToTop />
 
     </div>
   );

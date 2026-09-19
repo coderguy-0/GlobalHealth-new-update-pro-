@@ -2,56 +2,136 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
     <title>GlobalHealth | Trusted Health, Medicine &amp; Healthcare Information</title>
     <meta
       name="description"
-      content="Explore health information, medicines, lab tests, doctors, hospitals, medical facilities, healthcare news and intelligent assistance with GlobalHealth."
+      content="Explore verified health information, medicine monographs, lab test references, board-certified doctors, hospitals and live medical facilities, healthcare news and intelligent clinical assistance — with patient-controlled health records."
+    />
+    <meta
+      name="keywords"
+      content="health information, medicine directory, drug interactions, lab tests, health calculators, find a doctor, hospitals near me, medical news, health records, symptom checker"
     />
     <link rel="canonical" href="https://globalhealth.health/" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#2f6a85" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#020617" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="GlobalHealth" />
+    <meta name="application-name" content="GlobalHealth" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
+    <!-- Icons & installable web app -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="GlobalHealth" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:title" content="GlobalHealth | Trusted Health, Medicine &amp; Healthcare Information" />
     <meta
       property="og:description"
-      content="Explore health information, medicines, lab tests, doctors, hospitals, medical facilities, healthcare news and intelligent assistance with GlobalHealth."
+      content="Verified medical knowledge, diagnostic tools, board-certified providers, live facility telemetry and private health records — one connected healthcare network."
     />
     <meta property="og:url" content="https://globalhealth.health/" />
+    <meta property="og:image" content="https://globalhealth.health/icon-512.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:alt" content="GlobalHealth — global health network emblem" />
 
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="GlobalHealth | Trusted Health, Medicine &amp; Healthcare Information" />
     <meta
       name="twitter:description"
-      content="Explore health information, medicines, lab tests, doctors, hospitals, medical facilities, healthcare news and intelligent assistance with GlobalHealth."
+      content="Verified medical knowledge, diagnostic tools, board-certified providers, live facility telemetry and private health records — one connected healthcare network."
     />
+    <meta name="twitter:image" content="https://globalhealth.health/icon-512.png" />
 
     <!-- Structured data -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "MedicalWebPage",
-        "name": "GlobalHealth",
-        "description": "Trusted health information, medicine directory, laboratory test guides, doctor and facility discovery, and healthcare news.",
-        "url": "https://globalhealth.health/",
-        "inLanguage": "en",
-        "isPartOf": {
-          "@type": "WebSite",
-          "name": "GlobalHealth"
-        }
+        "@graph": [
+          {
+            "@type": "MedicalWebPage",
+            "@id": "https://globalhealth.health/#webpage",
+            "name": "GlobalHealth",
+            "description": "Trusted health information, medicine directory, laboratory test guides, doctor and facility discovery, and healthcare news.",
+            "url": "https://globalhealth.health/",
+            "inLanguage": "en",
+            "isPartOf": { "@id": "https://globalhealth.health/#website" },
+            "audience": {
+              "@type": "MedicalAudience",
+              "audienceType": "Patient"
+            },
+            "lastReviewed": "2026-09-19",
+            "specialty": "https://schema.org/PublicHealth"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://globalhealth.health/#website",
+            "name": "GlobalHealth",
+            "url": "https://globalhealth.health/",
+            "inLanguage": "en",
+            "potentialAction": {
+              "@type": "SearchAction",
+              "target": {
+                "@type": "EntryPoint",
+                "urlTemplate": "https://globalhealth.health/?q={search_term_string}"
+              },
+              "query-input": "required name=search_term_string"
+            }
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://globalhealth.health/#organization",
+            "name": "GlobalHealth",
+            "url": "https://globalhealth.health/",
+            "logo": "https://globalhealth.health/icon-512.png",
+            "description": "A unified healthcare platform connecting verified medical information, provider and facility discovery, diagnostic references and patient-controlled health records.",
+            "knowsAbout": [
+              "Medicine",
+              "Pharmacology",
+              "Laboratory diagnostics",
+              "Clinical guidelines",
+              "Public health",
+              "Patient data privacy"
+            ]
+          }
+        ]
       }
     </script>
 
-    <meta name="robots" content="index, follow" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body class="bg-white text-slate-900 antialiased selection:bg-medical-600 selection:text-white">
     <div id="root"></div>
+    <!-- Apply the stored colour scheme before first paint to avoid a flash of the wrong theme. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('gh:theme-preference');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var theme = stored === 'dark' || stored === 'light' ? stored : prefersDark ? 'dark' : 'light';
+          if (theme === 'dark') document.documentElement.classList.add('dark');
+          document.documentElement.style.colorScheme = theme;
+        } catch (e) {
+          /* localStorage unavailable — fall back to the light theme */
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

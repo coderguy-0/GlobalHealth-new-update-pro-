@@ -8,7 +8,13 @@ import { PharmacyProvider } from './context/PharmacyContext';
 import { BiomedicalProvider } from './context/BiomedicalContext';
 import { DiagnosticProvider } from './context/DiagnosticContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './components/enhancements/ThemeContext';
+import { ToastProvider } from './components/enhancements/ToastContext';
+import { registerServiceWorker } from './lib/registerServiceWorker';
 import './index.css';
+
+// Installable + offline-readable reference pages (production only).
+registerServiceWorker();
 
 // Prevent a lazy route or third-party widget from taking down the entire
 // application. Errors are shown as an actionable, accessible recovery screen;
@@ -70,14 +76,18 @@ function IdentityScopedProviders({ children }: { children: React.ReactNode }) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <LocalizationProvider>
-      <AuthProvider>
-        <IdentityScopedProviders>
-          <AppErrorBoundary>
-            <App />
-          </AppErrorBoundary>
-        </IdentityScopedProviders>
-      </AuthProvider>
-    </LocalizationProvider>
+    <ThemeProvider>
+      <LocalizationProvider>
+        <AuthProvider>
+          <IdentityScopedProviders>
+            <ToastProvider>
+              <AppErrorBoundary>
+                <App />
+              </AppErrorBoundary>
+            </ToastProvider>
+          </IdentityScopedProviders>
+        </AuthProvider>
+      </LocalizationProvider>
+    </ThemeProvider>
   </StrictMode>,
 );
