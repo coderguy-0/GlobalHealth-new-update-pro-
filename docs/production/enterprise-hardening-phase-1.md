@@ -80,13 +80,39 @@ verified against the running server on port 3000.
   - Urgent `/api/ai-assistant` request returns emergency guidance (not 503).
   - EHR consent share create/verify/revoke works.
 
+### 8. One-time secret delivery (registration & recovery)
+
+Registration, verification and password recovery depend on a one-time secret
+reaching the account owner. The server previously generated those secrets,
+stored them, and dropped them — no transport was ever called, so a new visitor
+could create an account but never verify it and never complete a password
+reset. `src/server/notifications.ts` now provides a transport-agnostic delivery
+layer:
+
+- `webhook` — POSTs the message to `NOTIFICATION_WEBHOOK_URL`. This is the
+  production transport; point it at your email/SMS provider.
+- `capture` — records the message in a bounded in-memory outbox so a local
+  developer (or the `npm run accept:ai` suite) can complete the flow. It is the
+  automatic default **outside** production only.
+- `disabled` — fails closed. No secret is returned to anyone, the API response
+  says delivery could not happen, and a startup warning is logged.
+
+The secret is returned to the requesting browser only under the `capture`
+transport, and only when `AUTH_CODE_CAPTURE=true` has been set explicitly.
+`GET /api/health/notifications` reports the active transport and recent
+delivery counts so a provider-less deployment is visible to operators instead
+of failing silently.
+
 ## External configuration still required (not code)
 
 - `GEMINI_API_KEY` for generative AI replies. The AI workspace already degrades
   gracefully; urgent safety responses work without it.
 - `CORS_ORIGIN` allowlist for staging/production.
 - Real email / SMS provider for production delivery of verification, password
-  reset, appointment and order notifications.
+  reset, appointment and order notifications. Wire it to
+  `NOTIFICATION_WEBHOOK_URL`; until then, registration cannot complete on a
+  production deployment (the API reports this honestly rather than pretending
+  a code was sent).
 - Real payment provider with webhook verification for live checkout.
 - Real storage / CDN provider for private medical documents.
 - Legal/privacy review before making compliance claims (e.g. HIPAA, GDPR,

@@ -7,5 +7,7 @@ coverage/
 .env*
 !.env.example
 
-# Runtime disk-backed persistence (never commit user data)
-data/runtime/
+# Runtime disk-backed persistence (never commit user data).
+# GH_RUNTIME_DIR can point anywhere, so ignore any runtime store directory.
+data/
+*/runtime/

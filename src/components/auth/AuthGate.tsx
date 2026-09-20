@@ -40,10 +40,9 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated, onOpenFullS
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   // Signup fields
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
-  const [signupPassword, setSignupPassword] = useState('');
+  // Account creation is handled by the dedicated three-step signup page
+  // (see onOpenFullSignup) so consent is captured explicitly. The gate only
+  // collects sign-in credentials.
 
   const activeMode = gateMode || mode;
   const switchMode = (m: 'login' | 'signup') => {

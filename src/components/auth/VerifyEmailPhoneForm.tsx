@@ -4,10 +4,21 @@ import { verifyCode, resendVerificationCode } from '../../services/authService';
 import { PublicUserAccount } from '../../types/auth';
 import { maskPhone, maskEmail } from '../../lib/maskContact';
 
+/** How the server reported delivery of the one-time code. */
+export interface VerificationDelivery {
+  transport: 'webhook' | 'capture' | 'disabled';
+  delivered: boolean;
+  /** Present ONLY when the server runs the non-production capture transport.
+   *  It lets a developer finish the flow locally; never sent by production. */
+  devCode?: string;
+}
+
 interface VerifyEmailPhoneFormProps {
   userId: string;
   contactTarget?: string;
   type?: 'email' | 'phone';
+  /** Delivery outcome for the code issued at signup / sign-in. */
+  delivery?: VerificationDelivery | null;
   onSuccess: (user: PublicUserAccount, token?: string) => void;
   onNavigate: (view: 'login' | 'signup') => void;
   onRequestHelp?: () => void;
@@ -18,6 +29,7 @@ export const VerifyEmailPhoneForm: React.FC<VerifyEmailPhoneFormProps> = ({
   userId,
   contactTarget = 'your registered address',
   type = 'email',
+  delivery = null,
   onSuccess,
   onNavigate,
   onRequestHelp,
@@ -35,6 +47,9 @@ export const VerifyEmailPhoneForm: React.FC<VerifyEmailPhoneFormProps> = ({
   // Limited attempts (spec): 5 tries before the code is locked and a resend is required.
   const [attemptsLeft, setAttemptsLeft] = useState(5);
   const [attemptsLocked, setAttemptsLocked] = useState(false);
+  // Tracks delivery across the initial send and any resend, so the screen
+  // always tells the truth about whether a code actually left the server.
+  const [deliveryState, setDeliveryState] = useState<VerificationDelivery | null>(delivery);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -127,6 +142,7 @@ export const VerifyEmailPhoneForm: React.FC<VerifyEmailPhoneFormProps> = ({
       setCanResend(false);
       setAttemptsLeft(5);
       setAttemptsLocked(false);
+      setDeliveryState(result.delivery ?? null);
       setInfoMessage(result.message || 'A new 6-digit code has been dispatched.');
     } else {
       setErrorMessage(result.error || 'Failed to resend verification code.');
@@ -167,6 +183,62 @@ export const VerifyEmailPhoneForm: React.FC<VerifyEmailPhoneFormProps> = ({
                 : `${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} remaining before the code locks.`}
             </p>
           </div>
+
+          {/* Delivery status — the screen must never claim a code was sent
+              when the server has no transport configured. */}
+          {deliveryState && deliveryState.transport === 'disabled' && !isSuccess && (
+            <div
+              role="alert"
+              className="mb-4 flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 text-left"
+            >
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <div className="leading-snug">
+                <span className="mb-0.5 block font-bold">We could not send your code</span>
+                This deployment has no email/SMS provider configured, so no code left the server. Ask your
+                GlobalHealth administrator to set <code className="font-mono">NOTIFICATION_WEBHOOK_URL</code>,
+                or tap “Resend code” once delivery is enabled.
+              </div>
+            </div>
+          )}
+
+          {/* Development capture: only ever present when the server itself
+              returned a code, which production does not do. */}
+          {deliveryState?.devCode && !isSuccess && (
+            <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-left text-xs text-sky-900">
+              <div className="flex items-center gap-2 font-bold">
+                <KeyRound className="h-4 w-4 shrink-0 text-sky-600" />
+                Development mode — no email provider configured
+              </div>
+              <p className="mt-1 leading-snug text-sky-800">
+                The server captured this code instead of emailing it. It is shown here only because this
+                environment has code capture enabled.
+              </p>
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <code className="rounded-lg border border-sky-300 bg-white px-3 py-1.5 font-mono text-base font-bold tracking-[0.3em] text-sky-900">
+                  {deliveryState.devCode}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const chars = String(deliveryState.devCode)
+                      .replace(/\D/g, '')
+                      .slice(0, 6)
+                      .split('');
+                    const next = ['', '', '', '', '', ''];
+                    chars.forEach((c, i) => {
+                      next[i] = c;
+                    });
+                    setDigits(next);
+                    setErrorMessage('');
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-white transition hover:bg-sky-700"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Fill this code
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Error Alert */}
           {errorMessage && (

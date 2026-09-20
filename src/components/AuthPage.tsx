@@ -13,7 +13,7 @@ import { LoginForm } from './auth/LoginForm';
 import { SignUpForm } from './auth/SignUpForm';
 import { ForgotPasswordForm } from './auth/ForgotPasswordForm';
 import { ResetPasswordForm } from './auth/ResetPasswordForm';
-import { VerifyEmailPhoneForm } from './auth/VerifyEmailPhoneForm';
+import { VerifyEmailPhoneForm, type VerificationDelivery } from './auth/VerifyEmailPhoneForm';
 import { AccountSecurityView } from './auth/AccountSecurityView';
 import { LogoutSuccessView } from './auth/LogoutSuccessView';
 import { AuthHelpModal } from './auth/AuthHelpModal';
@@ -76,6 +76,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     userId: string;
     contactTarget?: string;
     type: 'email' | 'phone';
+    /** Delivery outcome reported by the server for the issued code. */
+    delivery?: VerificationDelivery | null;
   } | null>(null);
 
   // Reset password token handover
@@ -320,7 +322,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       setVerificationData({
                         userId: data.userId,
                         contactTarget: data.email || data.phone || 'your registered contact',
-                        type: data.type
+                        type: data.type,
+                        delivery: data.delivery ?? null
                       });
                       setActiveSubView(data.type === 'phone' ? 'verify-phone' : 'verify-email');
                     }}
@@ -333,7 +336,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       setVerificationData({
                         userId: data.userId,
                         contactTarget: data.email,
-                        type: data.type
+                        type: data.type,
+                        delivery: data.delivery ?? null
                       });
                       setActiveSubView(data.type === 'phone' ? 'verify-phone' : 'verify-email');
                     }}
@@ -369,9 +373,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                 {(activeSubView === 'verify-email' || activeSubView === 'verify-phone') && (
                   <VerifyEmailPhoneForm
+                    key={verificationData?.userId || 'verify'}
                     userId={verificationData?.userId || ''}
                     contactTarget={verificationData?.contactTarget || 'your registered email/number'}
                     type={activeSubView === 'verify-phone' ? 'phone' : 'email'}
+                    delivery={verificationData?.delivery ?? null}
                     onSuccess={(user, token) => {
                       onLoginSuccess(user, token);
                       onNavigateToDashboard();

@@ -4,9 +4,16 @@ import { useLocalization } from '../../context/LocalizationContext';
 import { signupUser, calculatePasswordStrength } from '../../services/authService';
 import { TERMS_VERSION, PRIVACY_VERSION } from '../../lib/policyVersions';
 import { AvatarExpression } from './DoctorAvatar';
+import type { VerificationDelivery } from './VerifyEmailPhoneForm';
 
 interface SignUpFormProps {
-  onSuccess: (data: { userId: string; email: string; type: 'email' | 'phone' }) => void;
+  onSuccess: (data: {
+    userId: string;
+    email: string;
+    type: 'email' | 'phone';
+    /** Whether the server actually delivered the verification code. */
+    delivery?: VerificationDelivery | null;
+  }) => void;
   onNavigate: (view: 'login' | 'forgot-password') => void;
   onRequestHelp?: () => void;
   onOpenLegal?: (tab: 'terms' | 'privacy-policy') => void;
@@ -145,7 +152,8 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
       onSuccess({
         userId: result.userId,
         email: result.email || email,
-        type: result.verificationType || 'email'
+        type: result.verificationType || 'email',
+        delivery: result.delivery ?? null
       });
     } else {
       setErrorMessage(result.error || 'Failed to create account. Please check your information.');

@@ -4,13 +4,21 @@ import { useLocalization } from '../../context/LocalizationContext';
 import { loginUser, verifyTwoFactorLogin } from '../../services/authService';
 import { PublicUserAccount } from '../../types/auth';
 import { AvatarExpression } from './DoctorAvatar';
+import type { VerificationDelivery } from './VerifyEmailPhoneForm';
 
 interface LoginFormProps {
   onSuccess: (user: PublicUserAccount, token?: string) => void;
   onNavigate: (view: 'signup' | 'forgot-password' | 'verify-email' | 'verify-phone') => void;
   onRequestHelp?: () => void;
   onOpenLegal?: (tab: 'terms' | 'privacy-policy') => void;
-  onRequiresVerification?: (data: { userId: string; email?: string; phone?: string; type: 'email' | 'phone' }) => void;
+  onRequiresVerification?: (data: {
+    userId: string;
+    email?: string;
+    phone?: string;
+    type: 'email' | 'phone';
+    /** Whether the server actually delivered the verification code. */
+    delivery?: VerificationDelivery | null;
+  }) => void;
   /** Lets the animated assistant react to what the user is doing. */
   onAvatarInteract?: (expression: AvatarExpression, message?: string) => void;
 }
@@ -62,7 +70,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         onRequiresVerification({
           userId: result.userId,
           email: result.email,
-          type: result.verificationType || 'email'
+          type: result.verificationType || 'email',
+          delivery: result.delivery ?? null
         });
         return;
       }
