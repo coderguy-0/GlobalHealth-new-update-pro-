@@ -18,6 +18,12 @@ import { createAiProvider, AiProviderError } from './src/server/aiProvider';
 import { buildAuthorizedRecordSummary } from './src/core/ai/aiUserContext';
 import { loadRuntimeConfig } from './src/server/config';
 import { createLogger } from './src/server/logger';
+import {
+  createNotificationDispatcher,
+  resolveTransport,
+  buildVerificationMessage,
+  buildPasswordResetMessage
+} from './src/server/notifications';
 import { apiError } from './src/server/errors';
 import {
   hashSecret,
@@ -31,6 +37,21 @@ async function startServer() {
   const config = loadRuntimeConfig(process.env);
   const app = express();
   const logger = createLogger('server');
+  // One-time secrets (verification codes, reset tokens) must reach the account
+  // owner. Without a transport they would be generated and silently dropped,
+  // leaving registration and password recovery permanently incomplete.
+  const notificationDispatcher = createNotificationDispatcher({
+    transport: resolveTransport(
+      config.notificationTransport,
+      config.isProduction,
+      config.allowAuthCodeCapture,
+      config.notificationWebhookUrl
+    ),
+    webhookUrl: config.notificationWebhookUrl,
+    webhookTimeoutMs: config.notificationWebhookTimeoutMs,
+    allowCapture: config.allowAuthCodeCapture,
+    logger
+  });
   const appDir = process.cwd();
   const RUNTIME_DIR = path.join(appDir, config.runtimeDir, 'runtime');
   const readJsonFile = <T>(file: string, fallback: T): T => {
@@ -70,6 +91,7 @@ async function startServer() {
 
   // Dynamic port binding for Cloud Run / Container deployment with 3000 default
   const PORT = config.port;
+  const APP_BASE = config.appUrl || `http://localhost:${PORT}`;
   const IS_PRODUCTION = config.isProduction;
   for (const warning of config.warnings) {
     logger.warn('startup configuration warning', { warning });
@@ -168,6 +190,32 @@ async function startServer() {
       timestamp: new Date().toISOString(),
       uptimeSeconds: Math.floor(process.uptime()),
       requestId: (req as any).requestId,
+    });
+  });
+
+  // ----------------------------------------------------------------------
+  // 1b. Notification delivery diagnostics
+  // ----------------------------------------------------------------------
+  // Ops-facing view of how one-time secrets leave the server. It reports the
+  // transport and recent delivery attempts so a "no email provider" deployment
+  // is visible instead of silently failing. Message bodies (which embed the
+  // one-time secret) and destinations are never returned here.
+  app.get('/api/health/notifications', (req, res) => {
+    const outbox = notificationDispatcher.outbox.list();
+    return res.json({
+      success: true,
+      transport: notificationDispatcher.transport,
+      delivered: notificationDispatcher.transport !== 'disabled',
+      captured: outbox.length,
+      byPurpose: outbox.reduce<Record<string, number>>((acc, item) => {
+        acc[item.purpose] = (acc[item.purpose] || 0) + 1;
+        return acc;
+      }, {}),
+      note:
+        notificationDispatcher.transport === 'disabled'
+          ? 'No email/SMS transport is configured, so verification codes and password-reset tokens cannot be delivered and new accounts cannot be verified. Set NOTIFICATION_WEBHOOK_URL to your provider.'
+          : undefined,
+      requestId: (req as any).requestId
     });
   });
 
@@ -718,7 +766,7 @@ async function startServer() {
   };
 
   // 1. LOGIN ENDPOINT
-  app.post('/api/auth/login', (req, res) => {
+  app.post('/api/auth/login', async (req, res) => {
     const entryRl = hitRateLimit('auth-login', String(req.ip || 'anonymous'), 30, 5 * 60 * 1000);
     if (!entryRl.allowed) {
       return res.status(429).json({ success: false, code: 'RATE_LIMITED', error: `Too many attempts. Please try again in ${Math.ceil(entryRl.retryInMs / 60000)} minute(s).` });
@@ -806,13 +854,36 @@ async function startServer() {
       });
     }
     if (foundUser.accountStatus === 'EMAIL_VERIFICATION_REQUIRED') {
+      // The visitor is being sent to the verification screen, so they need a
+      // usable code. Issue a fresh one (the previous code may have expired)
+      // and deliver it through the configured transport.
+      const loginCode = String(Math.floor(100000 + Math.random() * 900000));
+      foundUser.verificationCode = {
+        code: loginCode,
+        type: 'email',
+        expiresAt: Date.now() + 15 * 60 * 1000
+      };
+      PUBLIC_USERS.set(foundUser.id, foundUser);
+      persistRuntimeAccounts();
+
+      const loginDelivery = await notificationDispatcher.send(
+        buildVerificationMessage(foundUser.email, 'email', loginCode)
+      );
+
       return res.status(200).json({
         success: true,
         verificationRequired: true,
         verificationType: 'email',
         userId: foundUser.id,
         email: foundUser.email,
-        message: 'Email verification required before accessing your dashboard.'
+        message: loginDelivery.delivered
+          ? 'Email verification required before accessing your dashboard.'
+          : 'Email verification is required, but this server has no email provider configured, so we could not send a code. Please contact GlobalHealth support.',
+        delivery: {
+          transport: loginDelivery.transport,
+          delivered: loginDelivery.delivered,
+          ...(loginDelivery.capturedSecret ? { devCode: loginDelivery.capturedSecret } : {})
+        }
       });
     }
 
@@ -876,7 +947,7 @@ async function startServer() {
   });
 
   // 2. SIGN UP ENDPOINT
-  app.post('/api/auth/signup', (req, res) => {
+  app.post('/api/auth/signup', async (req, res) => {
     const rl = hitRateLimit('auth-signup', String(req.ip || 'anonymous'), 10, 60 * 60 * 1000);
     if (!rl.allowed) {
       return res.status(429).json({ success: false, code: 'RATE_LIMITED', error: 'Too many account creations from this device. Please try again later.' });
@@ -998,6 +1069,13 @@ async function startServer() {
     PUBLIC_USERS.set(userId, newUser);
     persistRuntimeAccounts();
 
+    // Deliver the one-time code through the configured transport. It is a
+    // credential, so it is only ever returned to the caller when the operator
+    // has permitted capture (see src/server/notifications.ts).
+    const delivery = await notificationDispatcher.send(
+      buildVerificationMessage(cleanEmail, 'email', verificationCode)
+    );
+
     AUDIT_LOGS.push({
       id: `aud-${Date.now()}`,
       userId,
@@ -1005,16 +1083,26 @@ async function startServer() {
       timestamp: new Date().toISOString(),
       ipAddress: req.ip || '127.0.0.1',
       status: 'success',
-      details: `Account created with consent: Terms ${termsVersion}, Privacy ${privacyVersion}; verification code dispatched`
+      details: `Account created with consent: Terms ${termsVersion}, Privacy ${privacyVersion}; verification code ${
+        delivery.delivered ? 'dispatched' : 'NOT dispatched (no delivery transport configured)'
+      }`
     });
 
     return res.status(201).json({
       success: true,
-      message: 'Account created successfully. Please verify the 6-digit code sent to your registered contact method.',
+      message: delivery.delivered
+        ? 'Account created successfully. Please verify the 6-digit code sent to your registered contact method.'
+        : 'Account created, but we could not deliver your verification code because no email/SMS provider is configured on this server. Please contact GlobalHealth support.',
       verificationRequired: true,
       verificationType: 'email',
       userId,
-      email: cleanEmail
+      email: cleanEmail,
+      delivery: {
+        transport: delivery.transport,
+        delivered: delivery.delivered,
+        // Present ONLY for the capture transport. Undefined everywhere else.
+        ...(delivery.capturedSecret ? { devCode: delivery.capturedSecret } : {})
+      }
     });
   });
 
@@ -1121,7 +1209,7 @@ async function startServer() {
   // 4. RESEND VERIFICATION CODE
   const RESEND_ATTEMPTS: Map<string, AttemptWindow> = new Map();
 
-  app.post('/api/auth/resend-code', (req, res) => {
+  app.post('/api/auth/resend-code', async (req, res) => {
     const { userId, type } = req.body || {};
     const rl = checkRateLimit(RESEND_ATTEMPTS, String(userId || '').toLowerCase(), 5, 15 * 60 * 1000);
     if (!rl.allowed) {
@@ -1139,22 +1227,38 @@ async function startServer() {
     }
 
     const freshCode = String(Math.floor(100000 + Math.random() * 900000));
+    const resendIsPhone = type === 'phone';
+    const resendChannel: 'phone' | 'email' = resendIsPhone ? 'phone' : 'email';
+    const resendTransportChannel: 'email' | 'sms' = resendIsPhone ? 'sms' : 'email';
     user.verificationCode = {
       code: freshCode,
-      type: type === 'phone' ? 'phone' : 'email',
+      type: resendChannel,
       expiresAt: Date.now() + 15 * 60 * 1000
     };
     PUBLIC_USERS.set(user.id, user);
     persistRuntimeAccounts();
 
+    const destination =
+      resendIsPhone && user.phoneNumber ? user.phoneNumber : user.email;
+    const resendDelivery = await notificationDispatcher.send(
+      buildVerificationMessage(destination, resendTransportChannel, freshCode)
+    );
+
     return res.json({
       success: true,
-      message: `A new 6-digit verification code has been dispatched to your registered ${type === 'phone' ? 'mobile number' : 'email address'}.`
+      message: resendDelivery.delivered
+        ? `A new 6-digit verification code has been dispatched to your registered ${resendChannel === 'phone' ? 'mobile number' : 'email address'}.`
+        : `We could not send a new code because no email/SMS provider is configured on this server. Please contact GlobalHealth support.`,
+      delivery: {
+        transport: resendDelivery.transport,
+        delivered: resendDelivery.delivered,
+        ...(resendDelivery.capturedSecret ? { devCode: resendDelivery.capturedSecret } : {})
+      }
     });
   });
 
   // 5. FORGOT PASSWORD (PRIVACY-PRESERVING)
-  app.post('/api/auth/forgot-password', (req, res) => {
+  app.post('/api/auth/forgot-password', async (req, res) => {
     const rl = hitRateLimit('auth-recovery', String(req.ip || 'anonymous'), 8, 15 * 60 * 1000);
     if (!rl.allowed) {
       return res.status(429).json({ success: false, code: 'RATE_LIMITED', error: 'Too many recovery requests. Please try again later.' });
@@ -1192,6 +1296,13 @@ async function startServer() {
       PUBLIC_USERS.set(matchedUser.id, matchedUser);
       persistRuntimeAccounts();
 
+      // Dispatch through the configured transport. The token is a credential:
+      // it is never returned to the requesting browser unless the operator has
+      // explicitly permitted capture for this environment.
+      await notificationDispatcher.send(
+        buildPasswordResetMessage(matchedUser.email, 'email', resetToken, APP_BASE)
+      );
+
       AUDIT_LOGS.push({
         id: `aud-${Date.now()}`,
         userId: matchedUser.id,
@@ -1199,13 +1310,12 @@ async function startServer() {
         timestamp: new Date().toISOString(),
         ipAddress: req.ip || '127.0.0.1',
         status: 'success',
-        details: 'Password recovery requested'
+        details: 'Password recovery requested; recovery instructions dispatched'
       });
     }
 
-    // Always return privacy-preserving response. Recovery tokens are delivered
-    // through the registered email/SMS channel only and are never returned to
-    // the browser that issued the request.
+    // Always return a privacy-preserving response: it does not reveal whether
+    // the identifier matched an account.
     return res.json({
       success: true,
       message: "If an eligible account matches the information provided, we'll send instructions to the registered contact method."
@@ -2468,7 +2578,6 @@ async function startServer() {
   ]);
 
   const nowIso = () => new Date().toISOString();
-  const APP_BASE = config.appUrl || `http://localhost:${PORT}`;
 
   // ---------------- APPEND-ONLY, HASH-CHAINED AUDIT TRAIL ---------------
   // Every important event receives a unique event ID, a server-generated

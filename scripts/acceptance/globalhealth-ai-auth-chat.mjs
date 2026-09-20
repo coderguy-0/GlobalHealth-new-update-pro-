@@ -61,9 +61,27 @@ async function createVerifiedAccount(label) {
   assert(signup.status === 201, `${label} signup should succeed`);
   assert(signup.json.verificationRequired, `${label} signup should request verification`);
 
+  // Verification needs the real code the server generated. There is no
+  // universal test code by design, so the code must come from the delivery
+  // transport. The `capture` transport (the non-production default) returns it
+  // in `signup.json.delivery.devCode`; a webhook-backed deployment must supply
+  // it out-of-band instead.
+  const delivery = signup.json.delivery || {};
+  assert(
+    delivery.delivered,
+    `${label} signup must deliver the verification code — got transport "${delivery.transport}". ` +
+      `Configure NOTIFICATION_WEBHOOK_URL, or run with AUTH_CODE_CAPTURE=true to use the capture transport.`
+  );
+  const code = delivery.devCode;
+  assert(
+    code,
+    `${label} signup did not expose a capture code (transport "${delivery.transport}"). ` +
+      `Run the server with AUTH_CODE_CAPTURE=true and no NOTIFICATION_WEBHOOK_URL to exercise this test.`
+  );
+
   const verify = await request('/api/auth/verify-code', {
     method: 'POST',
-    body: { userId: signup.json.userId, code: signup.json.devCode || '123456', type: 'email' },
+    body: { userId: signup.json.userId, code, type: 'email' },
   });
   assert(verify.ok, `${label} email verification should succeed`);
 

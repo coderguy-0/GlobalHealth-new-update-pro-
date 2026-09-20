@@ -21,7 +21,7 @@ import { FoodComparisonLabView } from './FoodComparisonLabView';
 import { RecipesView } from './RecipesView';
 
 interface NutritionLibraryViewProps {
-  /** Section to open on mount. /recipes and /nutrition both land on Recipes. */
+  /** Section to open on mount: `#recipes` opens the recipe library, `#nutrition` the nutrient index. */
   initialSection?: NutritionSection;
   savedIds: string[];
   onToggleSave: (id: string) => void;

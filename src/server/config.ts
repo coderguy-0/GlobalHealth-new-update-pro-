@@ -5,6 +5,8 @@
 // safe without them (e.g. credential verification fails closed without a
 // registry, prescription signing stays UNSIGNED without a signing secret).
 
+import type { NotificationTransport } from './notifications';
+
 export interface RuntimeConfig {
   nodeEnv: 'development' | 'test' | 'production';
   isProduction: boolean;
@@ -22,6 +24,12 @@ export interface RuntimeConfig {
   medAuthRegistrySecret: string;
   prescriptionSigningSecret: string;
   ghAdminKey: string;
+  /** How one-time secrets (verification codes, reset tokens) leave the server. */
+  notificationTransport: NotificationTransport | undefined;
+  notificationWebhookUrl: string;
+  notificationWebhookTimeoutMs: number;
+  /** Explicit opt-in that permits the capture transport to return secrets. */
+  allowAuthCodeCapture: boolean;
   newsAdminBootstrap: {
     email: string;
     password: string;
@@ -58,6 +66,31 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
   const medAuthRegistrySecret = (env.MEDAUTH_REGISTRY_SECRET || '').trim();
   const prescriptionSigningSecret = (env.PRESCRIPTION_SIGNING_SECRET || '').trim();
   const ghAdminKey = (env.GH_ADMIN_KEY || '').trim();
+
+  // ---- Notification delivery (one-time secrets) ----
+  const notificationWebhookUrl = (env.NOTIFICATION_WEBHOOK_URL || '').trim();
+  const notificationWebhookTimeoutMs = Number.parseInt(env.NOTIFICATION_WEBHOOK_TIMEOUT_MS || '8000', 10);
+  const allowAuthCodeCapture = String(env.AUTH_CODE_CAPTURE || '').trim().toLowerCase() === 'true';
+  const rawTransport = (env.NOTIFICATION_TRANSPORT || '').trim().toLowerCase();
+  const notificationTransport: NotificationTransport | undefined =
+    rawTransport === 'webhook' || rawTransport === 'capture' || rawTransport === 'disabled'
+      ? (rawTransport as NotificationTransport)
+      : undefined;
+  if (rawTransport && !notificationTransport) {
+    warnings.push(
+      `NOTIFICATION_TRANSPORT="${rawTransport}" is not recognised; use webhook, capture or disabled.`
+    );
+  }
+  if (isProduction && allowAuthCodeCapture) {
+    warnings.push(
+      'AUTH_CODE_CAPTURE=true in production: verification codes and password-reset tokens are returned to the requesting browser. Enable this ONLY for a demo instance with no real user data.'
+    );
+  }
+  if (isProduction && !notificationWebhookUrl && !allowAuthCodeCapture) {
+    warnings.push(
+      'NOTIFICATION_WEBHOOK_URL is not set; verification codes and password-reset tokens cannot be delivered, so new accounts cannot be verified. Configure a delivery provider (or set AUTH_CODE_CAPTURE=true for a non-sensitive demo).'
+    );
+  }
 
   if (isProduction && !ghAdminKey) {
     warnings.push('GH_ADMIN_KEY is not set; pharmacy-partner administrative verification is disabled.');
@@ -96,6 +129,13 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
     medAuthRegistrySecret,
     prescriptionSigningSecret,
     ghAdminKey,
+    notificationTransport,
+    notificationWebhookUrl,
+    notificationWebhookTimeoutMs:
+      Number.isFinite(notificationWebhookTimeoutMs) && notificationWebhookTimeoutMs > 0
+        ? notificationWebhookTimeoutMs
+        : 8000,
+    allowAuthCodeCapture,
     newsAdminBootstrap: {
       email: (env.NEWS_ADMIN_BOOTSTRAP_EMAIL || '').trim(),
       password: (env.NEWS_ADMIN_BOOTSTRAP_PASSWORD || '').trim(),

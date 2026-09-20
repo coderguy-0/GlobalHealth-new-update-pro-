@@ -869,7 +869,10 @@ export default function App() {
         {(currentTab === 'nutrition' || currentTab === 'recipes') && (
           <NutritionLibraryView
             key={currentTab}
-            initialSection="recipes"
+            // `#recipes` opens the recipe library; `#nutrition` opens the
+            // nutrient index. Both previously opened Recipes, so the Nutrition
+            // entry in the navigation showed the wrong section.
+            initialSection={currentTab === 'nutrition' ? 'nutrients' : 'recipes'}
             savedIds={savedIds}
             onToggleSave={handleToggleSave}
             onRequestAuth={() => handleOpenAuthModal('login')}

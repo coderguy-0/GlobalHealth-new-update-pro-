@@ -2,9 +2,15 @@
 
 ## Current status
 
-- **Unit tests**: PASS (14 tests). Covers `src/server/security.ts` (scrypt,
-  PBKDF2 legacy, opaque tokens, TOTP) and `src/server/config.ts` (env parsing,
-  production fail-closed rules).
+- **Unit tests**: PASS (35 tests). Covers `src/server/security.ts` (scrypt,
+  PBKDF2 legacy, opaque tokens, TOTP), `src/server/config.ts` (env parsing,
+  production fail-closed rules) and `src/server/notifications.ts` (transport
+  selection, capture gating, webhook delivery/failure, bounded outbox,
+  destination redaction).
+- **Acceptance**: `npm run accept:ai` PASS on the live server. Registration now
+  completes end to end (signup → delivered code → verify → login); the suite
+  requires a delivery transport, so run it against a server started with
+  `AUTH_CODE_CAPTURE=true` (no webhook) or with a webhook provider.
 - **Integration tests**: NOT_IMPLEMENTED. The Express app is not yet exposed as
   an importable factory; this is the next testing milestone.
 - **E2E tests**: NOT_IMPLEMENTED.
@@ -32,6 +38,14 @@ and never touch production `data/`.
 - [x] Legacy PBKDF2 migration verified.
 - [x] Secure token 256-bit unique.
 - [x] TOTP generation + acceptance + rejection.
+
+### Notification delivery module
+- [x] Explicit provider selection; webhook without a URL fails closed.
+- [x] Capture refused in production unless explicitly opted in.
+- [x] Capture returns the code only when capture is allowed.
+- [x] Disabled transport never exposes a secret.
+- [x] Webhook success, provider rejection and network failure are reported, not thrown.
+- [x] Outbox is bounded; destinations are always redacted.
 
 ### Config module
 - [x] Safe development defaults.
