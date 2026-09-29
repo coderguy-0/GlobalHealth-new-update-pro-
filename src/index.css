@@ -21,20 +21,22 @@
   --color-brand-800: #065f46;
   --color-brand-900: #064e3b;
 
-  /* Medical — deep medical blue/teal used for primary platform identity.
+  /* Medical — clear, trustworthy azure blue used for primary platform identity.
+     Chosen to look crisp and professional against pure white backgrounds,
+     paired with the emerald "brand" green as the health accent.
      Homepage components are themed through these tokens so the whole platform
      can be re-themed later without rewriting components. */
-  --color-medical-50: #f0f7fa;
-  --color-medical-100: #daeaf0;
-  --color-medical-200: #b9d7e3;
-  --color-medical-300: #8dbccf;
-  --color-medical-400: #5a9cb6;
-  --color-medical-500: #3d829e;
-  --color-medical-600: #2f6a85;
-  --color-medical-700: #2a576d;
-  --color-medical-800: #284a5c;
-  --color-medical-900: #1e3a49;
-  --color-medical-950: #122530;
+  --color-medical-50: #eff8ff;
+  --color-medical-100: #dceffd;
+  --color-medical-200: #b3dffc;
+  --color-medical-300: #76c5f7;
+  --color-medical-400: #36a6ef;
+  --color-medical-500: #1189d6;
+  --color-medical-600: #0a6db8;
+  --color-medical-700: #0a5794;
+  --color-medical-800: #0d4777;
+  --color-medical-900: #103c62;
+  --color-medical-950: #08243e;
 
   /* Surfaces */
   --color-surface: #ffffff;
@@ -51,7 +53,7 @@
   --color-success: #16a34a;
   --color-warning: #d97706;
   --color-danger: #dc2626;
-  --color-info: #0284c7;
+  --color-info: #0a6db8;
 
   /* Radius scale */
   --radius-card: 1rem;
@@ -108,7 +110,7 @@
 @layer components {
   /* Compact form input used by the news/authority surfaces */
   .inp {
-    @apply w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:bg-white;
+    @apply w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-medical-500 focus:bg-white;
   }
 
   /* Standard surface card — one visual grammar across the product */
@@ -273,7 +275,7 @@
   position: absolute;
   inset: -16%;
   border-radius: 9999px;
-  background: radial-gradient(circle, rgb(63 130 158 / 0.26), transparent 68%);
+  background: radial-gradient(circle, rgb(17 137 214 / 0.26), transparent 68%);
   filter: blur(6px);
   pointer-events: none;
 }
@@ -641,7 +643,7 @@
    become a low-alpha hue tint over the slate surface with a light
    foreground, so each chip keeps its colour identity.
    ------------------------------------------------------------------ */
-.dark .bg-medical-50, .dark .bg-medical-50\/80, .dark .bg-medical-50\/50 { background-color: rgb(47 106 133 / 0.24); }
+.dark .bg-medical-50, .dark .bg-medical-50\/80, .dark .bg-medical-50\/50 { background-color: rgb(10 109 184 / 0.24); }
 .dark .bg-teal-50, .dark .bg-teal-100 { background-color: rgb(13 148 136 / 0.22); }
 .dark .bg-sky-50, .dark .bg-sky-100 { background-color: rgb(2 132 199 / 0.2); }
 .dark .bg-cyan-50, .dark .bg-cyan-100 { background-color: rgb(8 145 178 / 0.2); }
@@ -669,7 +671,7 @@
 
 /* Hue-tinted borders that wrap chips — softened to a low-alpha hue line so
    they read as a hairline rather than a bright outline on a dark surface. */
-.dark .border-medical-100, .dark .border-medical-200, .dark .border-medical-200\/80 { border-color: rgb(47 106 133 / 0.5); }
+.dark .border-medical-100, .dark .border-medical-200, .dark .border-medical-200\/80 { border-color: rgb(10 109 184 / 0.5); }
 .dark .border-emerald-100, .dark .border-emerald-200 { border-color: rgb(16 185 129 / 0.42); }
 .dark .border-rose-100, .dark .border-rose-200 { border-color: rgb(225 29 72 / 0.42); }
 .dark .border-amber-200 { border-color: rgb(217 119 6 / 0.42); }

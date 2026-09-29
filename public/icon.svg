@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="GlobalHealth">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#2f6a85"/>
+      <stop stop-color="#0a6db8"/>
       <stop offset="0.55" stop-color="#0f766e"/>
       <stop offset="1" stop-color="#059669"/>
     </linearGradient>
