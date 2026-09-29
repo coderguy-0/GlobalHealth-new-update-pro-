@@ -26,10 +26,23 @@ const STORAGE_KEYS = {
   MEDIA: 'gh_news_media_v3',
 };
 
-// Safe JSON Parse from LocalStorage
+function resolveScopedKey(key: string): string {
+  try {
+    const staff = newsAuthService.getCurrentStaffUser();
+    if (staff && staff.id) {
+      return `${key}__${staff.id}`;
+    }
+  } catch {
+    // fallback to base key
+  }
+  return key;
+}
+
+// Safe JSON Parse from LocalStorage (scoped to the active editorial account's private workspace)
 function getStoredItem<T>(key: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(key);
+    const scopedKey = resolveScopedKey(key);
+    const raw = localStorage.getItem(scopedKey) ?? localStorage.getItem(key);
     if (!raw) return fallback;
     return JSON.parse(raw) as T;
   } catch (err) {
@@ -40,7 +53,8 @@ function getStoredItem<T>(key: string, fallback: T): T {
 
 function setStoredItem<T>(key: string, data: T): void {
   try {
-    localStorage.setItem(key, JSON.stringify(data));
+    const scopedKey = resolveScopedKey(key);
+    localStorage.setItem(scopedKey, JSON.stringify(data));
   } catch (err) {
     console.warn(`Error writing ${key} to storage:`, err);
   }

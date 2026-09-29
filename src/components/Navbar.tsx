@@ -317,6 +317,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <button onClick={() => { setUserDropdownOpen(false); onOpenSecuritySettings(); }} className="flex w-full items-center gap-2 rounded-xl p-2 text-left font-semibold text-slate-700 transition hover:bg-slate-50">
                         <ShieldCheck className="h-4 w-4 text-emerald-600" /> Account Settings
                       </button>
+                      <button onClick={() => { setUserDropdownOpen(false); onOpenAuthPage('login'); }} className="flex w-full items-center gap-2 rounded-xl p-2 text-left font-semibold text-medical-700 transition hover:bg-medical-50">
+                        <LogIn className="h-4 w-4 text-medical-600" /> Role Sign In / Portals
+                      </button>
                     </div>
                     <div className="mt-1 border-t border-slate-100 pt-1">
                       <button

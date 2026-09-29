@@ -10,8 +10,8 @@ export type PortalAuthPhase = 'login' | 'signup' | 'forgot' | 'reset' | 'verify'
 interface DoctorAuthProps {
   initialPhase: PortalAuthPhase;
   onLoginSuccess: (doctor: DoctorProfile) => void;
-  /** Called after email/phone verification completes (→ guided onboarding). */
-  onVerified: () => void;
+  /** Called after email/phone verification completes (→ guided onboarding or workspace). */
+  onVerified: (doctor?: DoctorProfile) => void;
   onBackToGlobalHealth: () => void;
 }
 
@@ -47,6 +47,8 @@ export const DoctorAuth: React.FC<DoctorAuthProps> = ({ initialPhase, onLoginSuc
   const [countdown, setCountdown] = useState(45);
   const [canResend, setCanResend] = useState(false);
   const [attempts, setAttempts] = useState(5);
+  const [demoVerifyCode, setDemoVerifyCode] = useState<string | undefined>(undefined);
+  const [resetToken, setResetToken] = useState<string | undefined>(undefined);
 
   // Reset fields
   const [newPw, setNewPw] = useState('');
@@ -99,9 +101,19 @@ export const DoctorAuth: React.FC<DoctorAuthProps> = ({ initialPhase, onLoginSuc
     setFieldErr(fe);
     if (Object.keys(fe).length) return;
     setBusy(true);
-    const res = await doctorPortalApi.signup();
+    const res = await doctorPortalApi.signup({
+      fullName: fullName.trim(),
+      email: identifier.trim(),
+      phone: phone.trim(),
+      password,
+    });
     setBusy(false);
-    if (res.success) go('verify');
+    if (res.success) {
+      if (res.demoCode) setDemoVerifyCode(res.demoCode);
+      go('verify');
+    } else {
+      setError(res.error || 'Unable to create doctor account.');
+    }
   };
 
   const handleVerify = async () => {
@@ -111,7 +123,7 @@ export const DoctorAuth: React.FC<DoctorAuthProps> = ({ initialPhase, onLoginSuc
     setBusy(true);
     const res = await doctorPortalApi.verify(code);
     setBusy(false);
-    if (res.success) { onVerified(); }
+    if (res.success) { onVerified(res.doctor); }
     else {
       const left = attempts - 1;
       setAttempts(left);
@@ -128,7 +140,7 @@ export const DoctorAuth: React.FC<DoctorAuthProps> = ({ initialPhase, onLoginSuc
     setFieldErr(fe);
     if (Object.keys(fe).length) return;
     setBusy(true);
-    const res = await doctorPortalApi.reset();
+    const res = await doctorPortalApi.reset(newPw, identifier, resetToken);
     setBusy(false);
     if (res.success) setResetDone(true);
   };
@@ -335,7 +347,7 @@ export const DoctorAuth: React.FC<DoctorAuthProps> = ({ initialPhase, onLoginSuc
 
               {/* ---------------- FORGOT ---------------- */}
               {phase === 'forgot' && (
-                <form onSubmit={async (e) => { e.preventDefault(); if (!identifier.trim()) { setFieldErr({ identifier: 'Enter your professional email.' }); return; } setBusy(true); await doctorPortalApi.forgot(); setBusy(false); go('login'); setInfo('If an account matches, recovery instructions have been sent to the registered contact method.'); }}
+                <form onSubmit={async (e) => { e.preventDefault(); if (!identifier.trim()) { setFieldErr({ identifier: 'Enter your professional email.' }); return; } setBusy(true); const r = await doctorPortalApi.forgot(identifier); setBusy(false); if (r.demoResetToken) setResetToken(r.demoResetToken); go('reset'); setInfo('Enter your new password below to complete account recovery.'); }}
                   noValidate className="space-y-3.5">
                   <h2 className="text-lg font-extrabold text-slate-900">Recover Your Account</h2>
                   <p className="-mt-2 text-xs text-slate-500">We’ll help you securely regain access to your Doctor Portal account.</p>
@@ -429,6 +441,22 @@ export const DoctorAuth: React.FC<DoctorAuthProps> = ({ initialPhase, onLoginSuc
                       Enter the 6-digit code sent to <strong>{maskEmail(identifier)}</strong>. We never display the full address.
                     </p>
                   </div>
+
+                  {demoVerifyCode && (
+                    <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-amber-700">Simulated Verification Code</span>
+                        <span className="font-mono font-bold text-sm">{demoVerifyCode}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setDigits(demoVerifyCode.slice(0, 6).split(''))}
+                        className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 transition cursor-pointer"
+                      >
+                        Auto-fill
+                      </button>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between gap-2">
                     {digits.map((d, i) => (

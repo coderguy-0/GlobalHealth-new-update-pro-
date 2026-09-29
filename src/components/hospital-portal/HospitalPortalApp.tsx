@@ -1,5 +1,13 @@
 import React, { useState } from 'react';
-import { HospitalPortalProvider, useHospitalPortal, HospitalOrganization, StaffRole, seedOrganizations } from './hospitalPortalData';
+import {
+  HospitalPortalProvider,
+  HospitalOrganization,
+  StaffRole,
+  seedOrganizations,
+  getActiveHospitalSession,
+  setActiveHospitalSession,
+  clearActiveHospitalSession,
+} from './hospitalPortalData';
 import { PortalRoleProvider } from '../portal/PermissionGate';
 import { portalRoleForStaffRole } from '../../core/hospitalAccess';
 import { HospitalAuth } from './HospitalAuth';
@@ -12,54 +20,75 @@ interface HospitalPortalAppProps {
 
 type Phase = 'auth' | 'onboarding' | 'workspace';
 
-const Inner: React.FC<HospitalPortalAppProps> = ({ onBackToGlobalHealth }) => {
-  const { organization, setActiveHospital, setOrganizations, setActiveStaffRole, activeStaffRole } = useHospitalPortal();
-  const [phase, setPhase] = useState<Phase>('auth');
+export const HospitalPortalApp: React.FC<HospitalPortalAppProps> = ({ onBackToGlobalHealth }) => {
+  const [activeOrgs, setActiveOrgs] = useState<HospitalOrganization[]>(() => {
+    const sess = getActiveHospitalSession();
+    return sess?.organizations?.length ? sess.organizations : seedOrganizations;
+  });
 
-  // Auth gate: hospital data is only mounted inside the workspace after login.
+  const [activeRole, setActiveRole] = useState<StaffRole>(() => {
+    const sess = getActiveHospitalSession();
+    return sess?.staffRole || 'owner';
+  });
+
+  const [phase, setPhase] = useState<Phase>(() => {
+    const sess = getActiveHospitalSession();
+    if (!sess?.organizations?.length) return 'auth';
+    return sess.organizations[0]?.legalName ? 'workspace' : 'onboarding';
+  });
+
   const enterWorkspace = (orgs: HospitalOrganization[], role: StaffRole) => {
-    setOrganizations(orgs);
-    setActiveHospital(orgs[0]?.id ?? organization.id);
-    setActiveStaffRole(role);
-    // A fresh hospital (no legal name yet) goes through the registration wizard.
+    setActiveOrgs(orgs);
+    setActiveRole(role);
+    setActiveHospitalSession({
+      accountId: `hosp-acct-${orgs[0]?.id || 'default'}`,
+      email: orgs[0]?.publicEmail || '',
+      organizations: orgs,
+      staffRole: role,
+    });
     setPhase(orgs[0]?.legalName ? 'workspace' : 'onboarding');
   };
 
-  const portalRole = portalRoleForStaffRole(activeStaffRole);
+  const handleLogout = () => {
+    clearActiveHospitalSession();
+    setPhase('auth');
+  };
+
+  const primaryOrg = activeOrgs[0] ?? seedOrganizations[0];
+  const portalRole = portalRoleForStaffRole(activeRole);
 
   return (
-    <PortalRoleProvider role={portalRole}>
-      <div className="min-h-screen bg-slate-50">
-        {phase === 'auth' && (
-          <HospitalAuth
-            onBackToGlobalHealth={onBackToGlobalHealth}
-            onLoginSuccess={enterWorkspace}
-          />
-        )}
-        {phase === 'onboarding' && (
-          <HospitalOnboarding
-            workEmail={organization.publicEmail}
-            onComplete={(h: HospitalOrganization) => {
-              setOrganizations([h]);
-              setActiveHospital(h.id);
-              setActiveStaffRole('owner');
-              setPhase('workspace');
-            }}
-            onBack={() => setPhase('auth')}
-          />
-        )}
-        {phase === 'workspace' && (
-          <HospitalWorkspace onBackToGlobalHealth={onBackToGlobalHealth} onLogout={() => setPhase('auth')} />
-        )}
-      </div>
-    </PortalRoleProvider>
-  );
-};
-
-export const HospitalPortalApp: React.FC<HospitalPortalAppProps> = ({ onBackToGlobalHealth }) => {
-  return (
-    <HospitalPortalProvider initialOrganizations={seedOrganizations} initialRole="owner">
-      <Inner onBackToGlobalHealth={onBackToGlobalHealth} />
+    <HospitalPortalProvider key={primaryOrg.id} initialOrganizations={activeOrgs} initialRole={activeRole}>
+      <PortalRoleProvider role={portalRole}>
+        <div className="min-h-screen bg-slate-50">
+          {phase === 'auth' && (
+            <HospitalAuth
+              onBackToGlobalHealth={onBackToGlobalHealth}
+              onLoginSuccess={enterWorkspace}
+            />
+          )}
+          {phase === 'onboarding' && (
+            <HospitalOnboarding
+              workEmail={primaryOrg.publicEmail}
+              onComplete={(h: HospitalOrganization) => {
+                setActiveOrgs([h]);
+                setActiveRole('owner');
+                setActiveHospitalSession({
+                  accountId: `hosp-acct-${h.id}`,
+                  email: h.publicEmail,
+                  organizations: [h],
+                  staffRole: 'owner',
+                });
+                setPhase('workspace');
+              }}
+              onBack={() => setPhase('auth')}
+            />
+          )}
+          {phase === 'workspace' && (
+            <HospitalWorkspace onBackToGlobalHealth={onBackToGlobalHealth} onLogout={handleLogout} />
+          )}
+        </div>
+      </PortalRoleProvider>
     </HospitalPortalProvider>
   );
 };

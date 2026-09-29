@@ -8,6 +8,7 @@ interface VerifyEmailPhoneFormProps {
   userId: string;
   contactTarget?: string;
   type?: 'email' | 'phone';
+  demoCode?: string;
   onSuccess: (user: PublicUserAccount, token?: string) => void;
   onNavigate: (view: 'login' | 'signup') => void;
   onRequestHelp?: () => void;
@@ -18,6 +19,7 @@ export const VerifyEmailPhoneForm: React.FC<VerifyEmailPhoneFormProps> = ({
   userId,
   contactTarget = 'your registered address',
   type = 'email',
+  demoCode,
   onSuccess,
   onNavigate,
   onRequestHelp,
@@ -30,6 +32,7 @@ export const VerifyEmailPhoneForm: React.FC<VerifyEmailPhoneFormProps> = ({
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
+  const [activeDemoCode, setActiveDemoCode] = useState<string | undefined>(demoCode);
   const [verifiedUser, setVerifiedUser] = useState<PublicUserAccount | null>(null);
   const [verifiedToken, setVerifiedToken] = useState<string | undefined>(undefined);
   // Limited attempts (spec): 5 tries before the code is locked and a resend is required.
@@ -37,6 +40,10 @@ export const VerifyEmailPhoneForm: React.FC<VerifyEmailPhoneFormProps> = ({
   const [attemptsLocked, setAttemptsLocked] = useState(false);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  useEffect(() => {
+    if (demoCode) setActiveDemoCode(demoCode);
+  }, [demoCode]);
 
   // Resend Countdown Timer
   useEffect(() => {
@@ -127,6 +134,9 @@ export const VerifyEmailPhoneForm: React.FC<VerifyEmailPhoneFormProps> = ({
       setCanResend(false);
       setAttemptsLeft(5);
       setAttemptsLocked(false);
+      if (result.demoVerificationCode) {
+        setActiveDemoCode(result.demoVerificationCode);
+      }
       setInfoMessage(result.message || 'A new 6-digit code has been dispatched.');
     } else {
       setErrorMessage(result.error || 'Failed to resend verification code.');
@@ -167,6 +177,31 @@ export const VerifyEmailPhoneForm: React.FC<VerifyEmailPhoneFormProps> = ({
                 : `${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} remaining before the code locks.`}
             </p>
           </div>
+
+          {activeDemoCode && (
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/95 p-3 text-xs text-amber-900 text-left">
+              <div>
+                <span className="font-bold uppercase tracking-wider text-[10px] text-amber-700 block">
+                  Simulated Verification Delivery
+                </span>
+                <span>
+                  Your 6-digit verification code is <strong className="font-mono text-sm text-amber-950">{activeDemoCode}</strong>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const chars = activeDemoCode.slice(0, 6).split('');
+                  const next = ['', '', '', '', '', ''];
+                  chars.forEach((c, i) => { next[i] = c; });
+                  setDigits(next);
+                }}
+                className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 transition cursor-pointer"
+              >
+                Auto-fill Code
+              </button>
+            </div>
+          )}
 
           {/* Error Alert */}
           {errorMessage && (

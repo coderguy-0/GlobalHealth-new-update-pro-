@@ -20,6 +20,7 @@ import { useAuth, toUserAccount } from './context/AuthContext';
 import { AuthSubView } from './types/auth';
 import { TERMS_VERSION } from './lib/policyVersions';
 import { newsAuthService } from './services/newsAuthService';
+import { getAdminToken, getAdminProfile } from './services/newsGovernanceClient';
 import { CommandPalette } from './components/CommandPalette';
 import { EmergencyModal } from './components/EmergencyModal';
 import { ScrollProgress } from './components/enhancements/ScrollProgress';
@@ -431,11 +432,13 @@ export default function App() {
     return () => window.removeEventListener('hashchange', openIfEmergency);
   }, []);
 
-  // Re-lock the News Management workspace whenever the visitor leaves it, so
-  // opening the portal again always starts at the editorial sign-in.
+  // Keep News Management unlocked when an authenticated admin/staff session is active
   useEffect(() => {
-    if (overlayTab !== 'news-management' && overlayTab !== 'news-admin') {
-      setNewsStaffUnlocked(false);
+    if (overlayTab === 'news-management' || overlayTab === 'news-admin') {
+      if (getAdminToken() && getAdminProfile()) {
+        setNewsStaffUnlocked(true);
+      }
+    } else {
       setNewsGateScreen(null);
     }
   }, [overlayTab]);
@@ -538,23 +541,26 @@ export default function App() {
   );
 
 
-  // If a signed-in visitor lands on the auth page, take them to their
-  // dashboard instead of showing a login form. Defined BEFORE the gate-login
-  // routing effect so it never clobbers an intended protected destination:
-  // when a login just completed (intendedTabRef pending), we skip and let the
-  // routing effect below send the user to the page they originally wanted.
-  useEffect(() => {
-    if (
-      currentUser &&
-      currentTab === 'auth' &&
-      authInitialView !== 'security' &&
-      !intendedTabRef.current
-    ) {
-      setCurrentTab('dashboard');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, currentTab, authInitialView]);
-
+  // Route directly to any of the 5 role portals after authentication
+  const handleNavigateToPortal = useCallback(
+    (
+      portal:
+        | 'dashboard'
+        | 'doctor-portal'
+        | 'hospital-portal'
+        | 'pharmacy-portal'
+        | 'news-management'
+        | 'news-authority'
+    ) => {
+      if (portal === 'pharmacy-portal') {
+        pharmacyDeepLinkRef.current = 'dashboard';
+      } else if (portal === 'news-management') {
+        setNewsStaffUnlocked(true);
+      }
+      setCurrentTab(portal);
+    },
+    [setCurrentTab]
+  );
 
   // After a successful gate login, return the user to their intended destination.
   useEffect(() => {
@@ -780,7 +786,8 @@ export default function App() {
     }
 
     if (overlayTab === 'news-management' || overlayTab === 'news-admin') {
-      return newsStaffUnlocked ? (
+      const hasAdminSession = Boolean(getAdminToken() && getAdminProfile());
+      return newsStaffUnlocked || hasAdminSession ? (
         <NewsManagementCMS onBackToPublicNews={closeOverlay} />
       ) : (
         renderNewsGate()
@@ -998,6 +1005,7 @@ export default function App() {
               }}
               onReturnToHome={() => setCurrentTab('home')}
               onNavigateToDashboard={() => setCurrentTab('dashboard')}
+              onNavigateToPortal={handleNavigateToPortal}
               onOpenLegalPage={(tab) => setCurrentTab(tab)}
             />
           </Suspense>
@@ -1124,6 +1132,7 @@ export default function App() {
       <AuthGate
         onOpenFullSignup={() => { closeGate(); handleOpenAuthPage('signup'); }}
         onOpenForgotPassword={() => { closeGate(); handleOpenAuthPage('forgot-password'); }}
+        onNavigateToPortal={handleNavigateToPortal}
       />
 
       {/* Session-expired overlay */}

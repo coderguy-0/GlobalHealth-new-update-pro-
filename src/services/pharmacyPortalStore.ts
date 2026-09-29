@@ -73,10 +73,118 @@ export interface PharmacyApplicationRecord {
   otpVerified: boolean;
 }
 
+export const PHARMACY_ACTIVE_SCOPE_KEY = 'gh_pharmacy_portal_active_scope_v1';
+export const PHARMACY_ACTIVE_ACCOUNT_KEY = 'gh_pharmacy_portal_active_account_v1';
+
+const UNSCOPED_KEYS = new Set<string>([
+  STORAGE_KEYS.APPLICATIONS,
+]);
+
 export class PharmacyPortalService {
+  static getActiveScope(): string {
+    try {
+      return localStorage.getItem(PHARMACY_ACTIVE_SCOPE_KEY) || 'pharma-apex-01';
+    } catch {
+      return 'pharma-apex-01';
+    }
+  }
+
+  private static resolveKey(key: string): string {
+    if (UNSCOPED_KEYS.has(key)) return key;
+    const scope = this.getActiveScope();
+    return `${key}__${scope}`;
+  }
+
+  static setActiveWorkspaceScope(
+    partnerId: string,
+    accountInfo?: {
+      pharmacyName?: string;
+      contactName?: string;
+      licenseNumber?: string;
+      username?: string;
+      phone?: string;
+    }
+  ): void {
+    const cleanScope = (partnerId || 'pharma-apex-01').trim();
+    try {
+      localStorage.setItem(PHARMACY_ACTIVE_SCOPE_KEY, cleanScope);
+      localStorage.setItem(STORAGE_KEYS.IS_AUTHENTICATED, 'true');
+      if (accountInfo) {
+        localStorage.setItem(PHARMACY_ACTIVE_ACCOUNT_KEY, JSON.stringify({ partnerId: cleanScope, ...accountInfo }));
+      }
+    } catch {
+      // ignore
+    }
+
+    // Initialize isolated workspace profile/branch/staff for this pharmacy account if not yet initialized
+    if (accountInfo && cleanScope !== 'pharma-apex-01') {
+      try {
+        const profileKey = `${STORAGE_KEYS.PROFILE}__${cleanScope}`;
+        if (!localStorage.getItem(profileKey)) {
+          const customProfile: PharmacyProfileDetails = {
+            ...DEFAULT_PHARMACY_PROFILE,
+            id: cleanScope,
+            name: accountInfo.pharmacyName || DEFAULT_PHARMACY_PROFILE.name,
+            legalEntityName: `${accountInfo.pharmacyName || 'Partner Pharmacy'} Pvt. Ltd.`,
+            licenseNumber: accountInfo.licenseNumber || DEFAULT_PHARMACY_PROFILE.licenseNumber,
+            email: accountInfo.username || DEFAULT_PHARMACY_PROFILE.email,
+            phone: accountInfo.phone || DEFAULT_PHARMACY_PROFILE.phone,
+            verificationStatus: 'Verified Partner',
+          };
+          localStorage.setItem(profileKey, JSON.stringify(customProfile));
+        }
+
+        const staffKey = `${STORAGE_KEYS.STAFF}__${cleanScope}`;
+        if (!localStorage.getItem(staffKey)) {
+          const ownerStaff: PharmacyStaffMember = {
+            id: `staff-${cleanScope}-owner`,
+            name: accountInfo.contactName || accountInfo.pharmacyName || 'Chief Pharmacist',
+            email: accountInfo.username || 'owner@pharmacy.org',
+            phone: accountInfo.phone || '+91 98000 00000',
+            role: 'Pharmacy Owner / Admin',
+            branchId: `branch-${cleanScope}-main`,
+            branchName: `${accountInfo.pharmacyName || 'Main'} Central Dispensary`,
+            status: 'Active',
+            lastLogin: 'Just now',
+            registrationNumber: accountInfo.licenseNumber || 'RPH-VERIFIED',
+          };
+          localStorage.setItem(staffKey, JSON.stringify([ownerStaff]));
+          localStorage.setItem(`${STORAGE_KEYS.CURRENT_STAFF_ID}__${cleanScope}`, JSON.stringify(ownerStaff.id));
+        }
+
+        const branchKey = `${STORAGE_KEYS.BRANCHES}__${cleanScope}`;
+        if (!localStorage.getItem(branchKey)) {
+          const mainBranch: PharmacyBranchInfo = {
+            ...DEFAULT_BRANCHES[0],
+            id: `branch-${cleanScope}-main`,
+            name: `${accountInfo.pharmacyName || 'Main'} — Primary Hub`,
+            licenseNumber: accountInfo.licenseNumber || DEFAULT_BRANCHES[0].licenseNumber,
+            pharmacistInCharge: accountInfo.contactName || DEFAULT_BRANCHES[0].pharmacistInCharge,
+            phone: accountInfo.phone || DEFAULT_BRANCHES[0].phone,
+          };
+          localStorage.setItem(branchKey, JSON.stringify([mainBranch]));
+          localStorage.setItem(`${STORAGE_KEYS.CURRENT_BRANCH_ID}__${cleanScope}`, JSON.stringify(mainBranch.id));
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  static clearActiveWorkspaceScope(): void {
+    try {
+      localStorage.removeItem(PHARMACY_ACTIVE_SCOPE_KEY);
+      localStorage.removeItem(PHARMACY_ACTIVE_ACCOUNT_KEY);
+      localStorage.removeItem(STORAGE_KEYS.IS_AUTHENTICATED);
+    } catch {
+      // ignore
+    }
+  }
+
   private static getStored<T>(key: string, fallback: T): T {
     try {
-      const stored = localStorage.getItem(key);
+      const resolved = this.resolveKey(key);
+      const stored = localStorage.getItem(resolved);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed !== null && parsed !== undefined) {
@@ -91,7 +199,8 @@ export class PharmacyPortalService {
 
   private static setStored<T>(key: string, data: T): void {
     try {
-      localStorage.setItem(key, JSON.stringify(data));
+      const resolved = this.resolveKey(key);
+      localStorage.setItem(resolved, JSON.stringify(data));
     } catch (e) {
       console.warn(`Failed to save ${key} to storage:`, e);
     }

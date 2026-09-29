@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
-import { DoctorPortalProvider, useDoctorPortal, DoctorProfile, seedDoctor } from './doctorPortalData';
+import {
+  DoctorPortalProvider,
+  DoctorProfile,
+  seedDoctor,
+  getActiveDoctorSession,
+  setActiveDoctorSession,
+  clearActiveDoctorSession,
+} from './doctorPortalData';
 import { ClinicalWorkspaceProvider } from './doctorClinicalData';
 import { PortalRoleProvider } from '../portal/PermissionGate';
 import { DoctorAuth } from './DoctorAuth';
@@ -12,47 +19,67 @@ interface DoctorPortalAppProps {
 
 type Phase = 'auth' | 'onboarding' | 'workspace';
 
-const Inner: React.FC<DoctorPortalAppProps> = ({ onBackToGlobalHealth }) => {
-  const { doctor, setDoctor } = useDoctorPortal();
-  const [phase, setPhase] = useState<Phase>('auth');
+export const DoctorPortalApp: React.FC<DoctorPortalAppProps> = ({ onBackToGlobalHealth }) => {
+  const [activeDoctor, setActiveDoctor] = useState<DoctorProfile>(() => {
+    const sess = getActiveDoctorSession();
+    return sess?.doctor || seedDoctor;
+  });
 
-  // Auth gate: portal data is only mounted inside the workspace after login.
+  const [phase, setPhase] = useState<Phase>(() => {
+    const sess = getActiveDoctorSession();
+    if (!sess?.doctor) return 'auth';
+    return sess.doctor.verificationStatus === 'not_started' && !sess.doctor.qualifications.length
+      ? 'onboarding'
+      : 'workspace';
+  });
+
   const enterWorkspace = (d: DoctorProfile) => {
-    setDoctor(d);
-    setPhase(d.verificationStatus === 'not_started' && !d.qualifications.length ? 'onboarding' : 'workspace');
+    setActiveDoctor(d);
+    const needsOnboarding = d.verificationStatus === 'not_started' && !d.qualifications.length;
+    setActiveDoctorSession({ doctor: d, onboardingDone: !needsOnboarding });
+    setPhase(needsOnboarding ? 'onboarding' : 'workspace');
+  };
+
+  const handleLogout = () => {
+    clearActiveDoctorSession();
+    setPhase('auth');
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {phase === 'auth' && (
-        <DoctorAuth
-          initialPhase="login"
-          onBackToGlobalHealth={onBackToGlobalHealth}
-          onLoginSuccess={enterWorkspace}
-          onVerified={() => setPhase('onboarding')}
-        />
-      )}
-      {phase === 'onboarding' && (
-        <DoctorOnboarding
-          workEmail={doctor.workEmail}
-          onComplete={(d) => { setDoctor(d); setPhase('workspace'); }}
-          onBack={() => setPhase('auth')}
-        />
-      )}
-      {phase === 'workspace' && (
-        <ClinicalWorkspaceProvider>
-          <DoctorWorkspace onBackToGlobalHealth={onBackToGlobalHealth} onLogout={() => setPhase('auth')} />
-        </ClinicalWorkspaceProvider>
-      )}
-    </div>
-  );
-};
-
-export const DoctorPortalApp: React.FC<DoctorPortalAppProps> = ({ onBackToGlobalHealth }) => {
-  return (
-    <DoctorPortalProvider initialDoctor={seedDoctor}>
+    <DoctorPortalProvider key={activeDoctor.id} initialDoctor={activeDoctor}>
       <PortalRoleProvider role="DOCTOR">
-        <Inner onBackToGlobalHealth={onBackToGlobalHealth} />
+        <div className="min-h-screen bg-slate-50">
+          {phase === 'auth' && (
+            <DoctorAuth
+              initialPhase="login"
+              onBackToGlobalHealth={onBackToGlobalHealth}
+              onLoginSuccess={enterWorkspace}
+              onVerified={(d) => {
+                if (d) {
+                  enterWorkspace(d);
+                } else {
+                  setPhase('onboarding');
+                }
+              }}
+            />
+          )}
+          {phase === 'onboarding' && (
+            <DoctorOnboarding
+              workEmail={activeDoctor.workEmail}
+              onComplete={(d) => {
+                setActiveDoctor(d);
+                setActiveDoctorSession({ doctor: d, onboardingDone: true });
+                setPhase('workspace');
+              }}
+              onBack={() => setPhase('auth')}
+            />
+          )}
+          {phase === 'workspace' && (
+            <ClinicalWorkspaceProvider key={activeDoctor.id}>
+              <DoctorWorkspace onBackToGlobalHealth={onBackToGlobalHealth} onLogout={handleLogout} />
+            </ClinicalWorkspaceProvider>
+          )}
+        </div>
       </PortalRoleProvider>
     </DoctorPortalProvider>
   );

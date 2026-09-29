@@ -10,7 +10,7 @@ interface LoginFormProps {
   onNavigate: (view: 'signup' | 'forgot-password' | 'verify-email' | 'verify-phone') => void;
   onRequestHelp?: () => void;
   onOpenLegal?: (tab: 'terms' | 'privacy-policy') => void;
-  onRequiresVerification?: (data: { userId: string; email?: string; phone?: string; type: 'email' | 'phone' }) => void;
+  onRequiresVerification?: (data: { userId: string; email?: string; phone?: string; type: 'email' | 'phone'; demoVerificationCode?: string }) => void;
   /** Lets the animated assistant react to what the user is doing. */
   onAvatarInteract?: (expression: AvatarExpression, message?: string) => void;
 }
@@ -62,7 +62,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         onRequiresVerification({
           userId: result.userId,
           email: result.email,
-          type: result.verificationType || 'email'
+          type: result.verificationType || 'email',
+          demoVerificationCode: result.demoVerificationCode,
         });
         return;
       }
@@ -361,12 +362,50 @@ export const LoginForm: React.FC<LoginFormProps> = ({
             </>
           ) : (
             <>
-              <span>Log In</span>
+              <span>Sign In to User Portal</span>
               <ArrowRight className="h-4 w-4" />
             </>
           )}
         </button>
       </form>
+
+      {/* Quick-Fill Patient Accounts for Demo/Testing */}
+      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/90 p-3 text-left">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+            Quick-Fill Patient Accounts (Private Workspaces)
+          </span>
+          <span className="text-[10px] font-semibold text-medical-700">Click to fill</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setIdentifier('sarah.jenkins@example.com');
+              setPassword('Password123!');
+              setErrorMessage('');
+              setFieldErrors({});
+            }}
+            className="flex flex-col rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-left hover:border-medical-400 hover:bg-medical-50/40 transition cursor-pointer"
+          >
+            <span className="text-xs font-bold text-slate-900">Sarah Jenkins</span>
+            <span className="text-[11px] font-mono text-slate-500 truncate">sarah.jenkins@example.com</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIdentifier('alex.turner@example.com');
+              setPassword('Password123!');
+              setErrorMessage('');
+              setFieldErrors({});
+            }}
+            className="flex flex-col rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-left hover:border-medical-400 hover:bg-medical-50/40 transition cursor-pointer"
+          >
+            <span className="text-xs font-bold text-slate-900">Alex Turner</span>
+            <span className="text-[11px] font-mono text-slate-500 truncate">alex.turner@example.com</span>
+          </button>
+        </div>
+      </div>
 
       {/* Footer Navigation Switcher */}
       <div className="mt-6 border-t border-slate-100 pt-5 text-center">

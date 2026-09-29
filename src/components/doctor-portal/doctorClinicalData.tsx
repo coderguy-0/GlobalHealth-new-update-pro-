@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useDoctorPortal } from './doctorPortalData';
 
 /* ============================================================================
@@ -475,11 +475,30 @@ export const useClinicalWorkspace = (): ClinicalWorkspaceState => {
 
 export const ClinicalWorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { doctor, addAuditEvent } = useDoctorPortal();
-  const [patients, setPatients] = useState<PatientClinical[]>(seedPatients);
-  const [consultations, setConsultations] = useState<Consultation[]>(seedConsultations);
-  const [billing, setBilling] = useState<BillingTransaction[]>(seedBilling);
+  const clinicalPrefix = `gh_doctor_clinical_${doctor.id || 'default'}`;
+
+  const loadClinical = <T,>(suffix: string, fallback: T): T => {
+    try {
+      const raw = localStorage.getItem(`${clinicalPrefix}_${suffix}`);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const [patients, setPatients] = useState<PatientClinical[]>(() => loadClinical('patients', seedPatients));
+  const [consultations, setConsultations] = useState<Consultation[]>(() =>
+    loadClinical('consultations', doctor.id === 'doc-priya-nair' ? seedConsultations : [])
+  );
+  const [billing, setBilling] = useState<BillingTransaction[]>(() =>
+    loadClinical('billing', doctor.id === 'doc-priya-nair' ? seedBilling : [])
+  );
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [activeEncounterId, setActiveEncounterId] = useState<string | null>(null);
+
+  useEffect(() => { try { localStorage.setItem(`${clinicalPrefix}_patients`, JSON.stringify(patients)); } catch {} }, [clinicalPrefix, patients]);
+  useEffect(() => { try { localStorage.setItem(`${clinicalPrefix}_consultations`, JSON.stringify(consultations)); } catch {} }, [clinicalPrefix, consultations]);
+  useEffect(() => { try { localStorage.setItem(`${clinicalPrefix}_billing`, JSON.stringify(billing)); } catch {} }, [clinicalPrefix, billing]);
 
   const audit = useCallback((action: Parameters<typeof addAuditEvent>[0]['action'], resourceId: string, patientId: string | null, detail?: string, outcome: 'success' | 'denied' | 'blocked' = 'success') => {
     addAuditEvent({ actorId: doctor.id, actorRole: 'DOCTOR', action, resourceId, resourceType: 'CLINICAL', patientId, detail, outcome });

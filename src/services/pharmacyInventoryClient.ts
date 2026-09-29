@@ -216,7 +216,7 @@ export async function partnerRegister(input: {
   email: string;
   phone: string;
   password: string;
-}): Promise<{ ok: boolean; message?: string; error?: string }> {
+}): Promise<{ ok: boolean; message?: string; account?: PharmacyPartnerAccountView; token?: string; error?: string }> {
   try {
     const res = await fetch('/api/pharmacy-partner/auth/register', {
       method: 'POST',
@@ -225,7 +225,10 @@ export async function partnerRegister(input: {
     });
     const data = await res.json().catch(() => null);
     if (!res.ok || !data?.success) return { ok: false, error: data?.error || 'The registration could not be submitted.' };
-    return { ok: true, message: data.message };
+    if (data.token) {
+      storePartnerSession(data.token);
+    }
+    return { ok: true, message: data.message, account: data.account, token: data.token };
   } catch {
     return { ok: false, error: 'The registration service is temporarily unavailable. Please try again.' };
   }

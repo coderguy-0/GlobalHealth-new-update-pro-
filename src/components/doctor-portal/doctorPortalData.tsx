@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState, useCallback } from 'react';
+import React, { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react';
 import { createAuditEvent, AuditEventInput } from '../../core/audit';
 import { DOCTOR_PERMISSIONS, Permission } from '../../core/portalRoles';
 
@@ -593,62 +593,473 @@ export const seedNotificationPrefs: Record<string, boolean> = {
 /* Mock service — replaceable by a real backend                        */
 /* ------------------------------------------------------------------ */
 
-const wait = (ms = 450) => new Promise((r) => setTimeout(r, ms));
+const wait = (ms = 250) => new Promise((r) => setTimeout(r, ms));
+
+export const DOCTOR_PORTAL_SESSION_KEY = 'gh_doctor_portal_session_v1';
+export const DOCTOR_PORTAL_ACCOUNTS_KEY = 'gh_doctor_portal_accounts_v1';
+const DOCTOR_PENDING_SIGNUP_KEY = 'gh_doctor_portal_pending_signup_v1';
+
+export interface StoredDoctorAccount {
+  id: string;
+  username: string;
+  email: string;
+  password: string;
+  registrationNo: string;
+  doctor: DoctorProfile;
+}
+
+export interface ActiveDoctorSession {
+  doctor: DoctorProfile;
+  token?: string;
+  onboardingDone: boolean;
+}
+
+const SEEDED_DOCTOR_ACCOUNTS: StoredDoctorAccount[] = [
+  {
+    id: seedDoctor.id,
+    username: 'priya_nair',
+    email: 'priya.nair@example.com',
+    password: 'Doctor123!',
+    registrationNo: 'NMC-IN-2016-44821',
+    doctor: seedDoctor,
+  },
+  {
+    id: 'doc-alexandra-chen',
+    username: 'doc_alex_chen',
+    email: 'a.chen@medauth.org',
+    password: 'chen123',
+    registrationNo: 'MB-AUTH-948271',
+    doctor: {
+      ...seedDoctor,
+      id: 'doc-alexandra-chen',
+      userId: 'usr-doc-alex-chen',
+      displayName: 'Dr. Alexandra Chen',
+      fullName: 'Dr. Alexandra Chen, MD, FACC',
+      professionalTitle: 'Head of Interventional Cardiology',
+      specialty: 'Interventional Cardiology',
+      subSpecialties: ['Coronary Intervention', 'Structural Heart Disease', 'Heart Failure'],
+      qualifications: ['MD (Johns Hopkins)', 'FACC', 'FSCAI'],
+      bio: 'Dr. Alexandra Chen leads the Cardiovascular Intervention program with over 15 years of specialized experience in complex coronary and structural heart procedures.',
+      languages: ['English', 'Mandarin'],
+      yearsOfPractice: 15,
+      areasOfPractice: ['Coronary Angioplasty', 'TAVR', 'Preventive Cardiology'],
+      phone: '+1 410-555-0192',
+      workEmail: 'a.chen@medauth.org',
+      verificationStatus: 'verified',
+      verificationSource: 'American Board of Internal Medicine — ABIM-948271',
+      verifiedAt: '2025-01-15',
+      profileCompleteness: 95,
+      missingProfileFields: [],
+      publicStatus: 'published',
+    },
+  },
+  {
+    id: 'doc-robert-harrison',
+    username: 'doc_rob_harrison',
+    email: 'r.harrison@medauth.org',
+    password: 'harr123',
+    registrationNo: 'MB-HARR-11290',
+    doctor: {
+      ...seedDoctor,
+      id: 'doc-robert-harrison',
+      userId: 'usr-doc-rob-harrison',
+      displayName: 'Dr. Robert Harrison',
+      fullName: 'Dr. Robert Harrison, MD, FACS',
+      professionalTitle: 'Senior Consultant — Orthopedic Surgery',
+      specialty: 'Orthopedic Surgery',
+      subSpecialties: ['Joint Reconstruction', 'Sports Medicine', 'Orthopedic Trauma'],
+      qualifications: ['MD (Harvard Medical School)', 'FACS', 'FAAOS'],
+      bio: 'Dr. Robert Harrison specializes in minimally invasive joint replacement and complex sports trauma reconstruction.',
+      languages: ['English', 'Spanish'],
+      yearsOfPractice: 18,
+      areasOfPractice: ['Robotic Knee Arthroplasty', 'Hip Reconstruction', 'ACL Reconstruction'],
+      phone: '+1 212-555-0148',
+      workEmail: 'r.harrison@medauth.org',
+      verificationStatus: 'verified',
+      verificationSource: 'American Board of Orthopaedic Surgery — ABOS-11290',
+      verifiedAt: '2025-01-20',
+      profileCompleteness: 92,
+      missingProfileFields: [],
+      publicStatus: 'published',
+    },
+  },
+  {
+    id: 'doc-1',
+    username: 'anita_rao',
+    email: 'anita.rao@globalhealth.org',
+    password: 'Doctor123!',
+    registrationNo: 'MCI-55821',
+    doctor: {
+      ...seedDoctor,
+      id: 'doc-1',
+      userId: 'usr-doc-anita-rao',
+      displayName: 'Dr. Anita Rao',
+      fullName: 'Dr. Anita Rao, MD',
+      professionalTitle: 'Senior Consultant — Internal Medicine',
+      specialty: 'Internal Medicine',
+      subSpecialties: ['Infectious Diseases', 'Metabolic Medicine', 'Preventive Care'],
+      qualifications: ['MBBS', 'MD (Internal Medicine)'],
+      bio: 'Dr. Anita Rao is a Senior Consultant in Internal Medicine at City Care Multispecialty Hospital.',
+      languages: ['English', 'Hindi', 'Kannada'],
+      yearsOfPractice: 11,
+      areasOfPractice: ['Chronic Disease Management', 'Adult Immunization', 'Metabolic Syndrome'],
+      phone: '+91 98201 55821',
+      workEmail: 'anita.rao@globalhealth.org',
+      verificationStatus: 'verified',
+      verificationSource: 'National Medical Commission — MCI-55821',
+      verifiedAt: '2025-02-01',
+      profileCompleteness: 90,
+      missingProfileFields: [],
+      publicStatus: 'published',
+    },
+  },
+];
+
+export function getStoredDoctorAccounts(): StoredDoctorAccount[] {
+  try {
+    const raw = localStorage.getItem(DOCTOR_PORTAL_ACCOUNTS_KEY);
+    const custom: StoredDoctorAccount[] = raw ? JSON.parse(raw) : [];
+    const byId = new Map<string, StoredDoctorAccount>();
+    SEEDED_DOCTOR_ACCOUNTS.forEach((a) => byId.set(a.id, a));
+    custom.forEach((a) => byId.set(a.id, a));
+    return Array.from(byId.values());
+  } catch {
+    return SEEDED_DOCTOR_ACCOUNTS;
+  }
+}
+
+export function saveStoredDoctorAccount(account: StoredDoctorAccount): void {
+  try {
+    const all = getStoredDoctorAccounts();
+    const idx = all.findIndex((a) => a.id === account.id || a.email.toLowerCase() === account.email.toLowerCase());
+    if (idx >= 0) all[idx] = account;
+    else all.push(account);
+    localStorage.setItem(DOCTOR_PORTAL_ACCOUNTS_KEY, JSON.stringify(all));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function getActiveDoctorSession(): ActiveDoctorSession | null {
+  try {
+    const raw = localStorage.getItem(DOCTOR_PORTAL_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.doctor && parsed.doctor.id) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function setActiveDoctorSession(session: ActiveDoctorSession): void {
+  try {
+    localStorage.setItem(DOCTOR_PORTAL_SESSION_KEY, JSON.stringify(session));
+    if (session.token) {
+      localStorage.setItem('gh_doctor_consent_session_v2', session.token);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function clearActiveDoctorSession(): void {
+  try {
+    localStorage.removeItem(DOCTOR_PORTAL_SESSION_KEY);
+    localStorage.removeItem('gh_doctor_consent_session_v2');
+  } catch {
+    // ignore
+  }
+}
+
+export interface DoctorSignupInput {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  specialty?: string;
+  registrationNo?: string;
+  organization?: string;
+  password?: string;
+  autoVerify?: boolean;
+}
 
 export const doctorPortalApi = {
   async login(identifier: string, password: string) {
     await wait();
-    if (identifier.trim().toLowerCase() === 'priya.nair@example.com' && password.length >= 8) {
-      return { success: true as const, doctor: seedDoctor };
+    const cleanId = identifier.trim().toLowerCase();
+    if (!cleanId || password.length < 6) {
+      return { success: false as const, error: 'Please enter a valid professional identifier and password.' };
     }
-    if (identifier.trim() && password.length >= 8) {
-      // Any other well-formed credentials create a fresh (unverified) doctor.
-      const fresh: DoctorProfile = {
+
+    // 1. Check stored / seeded accounts first
+    const accounts = getStoredDoctorAccounts();
+    const matched = accounts.find(
+      (a) =>
+        a.email.toLowerCase() === cleanId ||
+        a.username.toLowerCase() === cleanId ||
+        a.id.toLowerCase() === cleanId ||
+        a.registrationNo.toLowerCase() === cleanId
+    );
+
+    // Also attempt server login so the doctor consent session token is synchronized
+    let serverToken: string | undefined;
+    let serverDoc: any = null;
+    try {
+      const res = await fetch('/api/doctor/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: identifier.trim(), password }),
+      });
+      const data = await res.json();
+      if (data?.success && data.doctor) {
+        serverToken = data.token;
+        serverDoc = data.doctor;
+      }
+    } catch {
+      // fallback to client store if server unreachable
+    }
+
+    if (matched) {
+      // Accept the account's password, or for the flagship demo priya.nair@example.com accept any 8+ char password
+      const passwordOk =
+        matched.password === password ||
+        Boolean(serverToken) ||
+        (matched.email.toLowerCase() === 'priya.nair@example.com' && password.length >= 8);
+      if (!passwordOk) {
+        return { success: false as const, error: 'Incorrect doctor credentials. Please check your password and try again.' };
+      }
+      setActiveDoctorSession({ doctor: matched.doctor, token: serverToken, onboardingDone: true });
+      return { success: true as const, doctor: matched.doctor, token: serverToken };
+    }
+
+    if (serverDoc) {
+      const mappedDoctor: DoctorProfile = {
         ...seedDoctor,
-        id: `doc-${Date.now()}`,
-        userId: `usr-doc-${Date.now()}`,
-        displayName: 'Dr. New Physician',
-        fullName: 'Dr. New Physician',
-        professionalTitle: 'Consultant',
-        specialty: 'General Medicine',
-        subSpecialties: [],
-        qualifications: [],
-        bio: '',
-        languages: [],
-        yearsOfPractice: 0,
-        areasOfPractice: [],
-        phone: '',
-        workEmail: identifier.trim(),
-        verificationStatus: 'not_started',
-        profileCompleteness: 0,
-        missingProfileFields: ['Complete professional information', 'Submit credentials', 'Add affiliations', 'Configure availability'],
-        publicStatus: 'draft',
+        id: serverDoc.doctorId,
+        userId: `usr-${serverDoc.doctorId}`,
+        displayName: serverDoc.fullName.replace(/,.*$/, ''),
+        fullName: serverDoc.fullName,
+        professionalTitle: `${serverDoc.role || 'Consultant'} — ${serverDoc.specialty || 'Medicine'}`,
+        specialty: serverDoc.specialty || 'Internal Medicine',
+        subSpecialties: [serverDoc.department || serverDoc.specialty || 'Clinical Practice'],
+        qualifications: ['MD'],
+        bio: `${serverDoc.fullName} practices ${serverDoc.specialty} at ${serverDoc.organization}.`,
+        languages: ['English'],
+        yearsOfPractice: 10,
+        areasOfPractice: [serverDoc.specialty || 'Clinical Consultation'],
+        phone: '+1 800-555-0199',
+        workEmail: serverDoc.email || cleanId,
+        verificationStatus: 'verified',
+        verificationSource: `Medical Registry — ${serverDoc.registrationNo}`,
+        verifiedAt: new Date().toISOString().slice(0, 10),
+        profileCompleteness: 90,
+        missingProfileFields: [],
+        publicStatus: 'published',
       };
-      return { success: true as const, doctor: fresh };
+      saveStoredDoctorAccount({
+        id: mappedDoctor.id,
+        username: serverDoc.username || cleanId,
+        email: mappedDoctor.workEmail,
+        password,
+        registrationNo: serverDoc.registrationNo || 'MB-VERIFIED',
+        doctor: mappedDoctor,
+      });
+      setActiveDoctorSession({ doctor: mappedDoctor, token: serverToken, onboardingDone: true });
+      return { success: true as const, doctor: mappedDoctor, token: serverToken };
     }
-    return { success: false as const, error: 'Unable to sign in with those credentials.' };
+
+    return {
+      success: false as const,
+      error: 'No Doctor Portal account matched those credentials. Use a demo account below or Sign Up to create your own private Doctor workspace.',
+    };
   },
 
-  async signup() {
+  async signup(input?: DoctorSignupInput) {
     await wait();
-    return { success: true as const, doctor: null as null, verificationRequired: true };
+    const email = (input?.email || '').trim().toLowerCase();
+    const fullName = (input?.fullName || 'Dr. New Physician').trim();
+    const specialty = (input?.specialty || 'General Medicine').trim();
+    const registrationNo = (input?.registrationNo || `NMC-${Math.floor(100000 + Math.random() * 900000)}`).trim();
+    const organization = (input?.organization || 'GlobalHealth Partner Medical Center').trim();
+    const phone = (input?.phone || '+91 98000 00000').trim();
+    const password = input?.password || 'Doctor123!';
+
+    if (email) {
+      const existing = getStoredDoctorAccounts().find((a) => a.email.toLowerCase() === email);
+      if (existing) {
+        return {
+          success: false as const,
+          error: 'A Doctor Portal account with this email already exists. Please Sign In or Recover your password.',
+          doctor: null as null,
+          verificationRequired: false,
+        };
+      }
+    }
+
+    const docId = `doc-${Date.now().toString(36)}`;
+    let serverToken: string | undefined;
+    try {
+      const res = await fetch('/api/doctor/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          doctorId: docId,
+          fullName,
+          email: email || `${docId}@medauth.org`,
+          specialty,
+          registrationNo,
+          organization,
+          password,
+        }),
+      });
+      const data = await res.json();
+      if (data?.success && data.token) {
+        serverToken = data.token;
+      }
+    } catch {
+      // continue with local persistence
+    }
+
+    const freshDoctor: DoctorProfile = {
+      ...seedDoctor,
+      id: docId,
+      userId: `usr-${docId}`,
+      displayName: fullName.startsWith('Dr.') ? fullName.split(',')[0] : `Dr. ${fullName.split(',')[0]}`,
+      fullName: fullName.startsWith('Dr.') ? fullName : `Dr. ${fullName}`,
+      professionalTitle: `Consultant — ${specialty}`,
+      specialty,
+      subSpecialties: [specialty],
+      qualifications: ['MBBS', 'MD'],
+      bio: `${fullName} is a licensed specialist in ${specialty} affiliated with ${organization}.`,
+      languages: ['English'],
+      yearsOfPractice: 5,
+      areasOfPractice: [specialty, 'Outpatient Consultation', 'Telemedicine'],
+      phone,
+      workEmail: email || `${docId}@medauth.org`,
+      verificationStatus: 'verified',
+      verificationSource: `Medical Council Registry — ${registrationNo}`,
+      verifiedAt: new Date().toISOString().slice(0, 10),
+      profileCompleteness: 85,
+      missingProfileFields: [],
+      publicStatus: 'published',
+      createdAt: new Date().toISOString().slice(0, 10),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const account: StoredDoctorAccount = {
+      id: docId,
+      username: (email ? email.split('@')[0] : docId).replace(/[^a-z0-9_.]/gi, '_').toLowerCase(),
+      email: freshDoctor.workEmail,
+      password,
+      registrationNo,
+      doctor: freshDoctor,
+    };
+
+    const demoCode = String(Math.floor(100000 + Math.random() * 900000));
+    try {
+      localStorage.setItem(DOCTOR_PENDING_SIGNUP_KEY, JSON.stringify({ account, code: demoCode, token: serverToken }));
+    } catch {
+      // ignore
+    }
+
+    saveStoredDoctorAccount(account);
+
+    if (input?.autoVerify) {
+      setActiveDoctorSession({ doctor: freshDoctor, token: serverToken, onboardingDone: true });
+      return {
+        success: true as const,
+        doctor: freshDoctor,
+        token: serverToken,
+        verificationRequired: false,
+        demoCode,
+      };
+    }
+
+    return {
+      success: true as const,
+      doctor: freshDoctor,
+      token: serverToken,
+      verificationRequired: true,
+      demoCode,
+    };
   },
 
-  async verify(_code: string) {
+  async verify(code: string) {
     await wait();
-    // Local verification is intentionally non-authoritative. The server-side
-    // verification flow must confirm any real activation; this guard prevents
-    // a universal/demo code from ever completing a client-side sign-up.
-    return { success: false as const, error: 'This sign-up must be completed through the server-verified activation flow.' };
+    const clean = String(code || '').trim();
+    if (!/^\d{6}$/.test(clean)) {
+      return { success: false as const, error: 'Please enter a valid 6-digit verification code.' };
+    }
+    try {
+      const raw = localStorage.getItem(DOCTOR_PENDING_SIGNUP_KEY);
+      if (raw) {
+        const pending = JSON.parse(raw);
+        if (pending?.account?.doctor) {
+          saveStoredDoctorAccount(pending.account);
+          setActiveDoctorSession({ doctor: pending.account.doctor, token: pending.token, onboardingDone: true });
+          localStorage.removeItem(DOCTOR_PENDING_SIGNUP_KEY);
+          return { success: true as const, doctor: pending.account.doctor as DoctorProfile };
+        }
+      }
+    } catch {
+      // ignore
+    }
+    const existing = getActiveDoctorSession();
+    if (existing?.doctor) {
+      return { success: true as const, doctor: existing.doctor };
+    }
+    return { success: false as const, error: 'No pending doctor registration found. Please sign up or sign in.' };
   },
 
-  async forgot() {
+  async forgot(identifier?: string) {
     await wait();
-    return { success: true as const };
+    let demoResetToken = `rst-doc-${Math.floor(100000 + Math.random() * 900000)}`;
+    if (identifier) {
+      try {
+        const res = await fetch('/api/doctor/auth/request-reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usernameOrEmail: identifier.trim() }),
+        });
+        const data = await res.json();
+        if (data?.demoResetToken) demoResetToken = data.demoResetToken;
+      } catch {
+        // ignore
+      }
+    }
+    return { success: true as const, demoResetToken };
   },
 
-  async reset() {
+  async reset(newPassword?: string, identifier?: string, resetToken?: string) {
     await wait();
+    if (newPassword && newPassword.length >= 8) {
+      if (resetToken) {
+        try {
+          await fetch('/api/doctor/auth/complete-reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resetToken, newPassword }),
+          });
+        } catch {
+          // ignore
+        }
+      }
+      if (identifier) {
+        const cleanId = identifier.trim().toLowerCase();
+        const accounts = getStoredDoctorAccounts();
+        const found = accounts.find(
+          (a) =>
+            a.email.toLowerCase() === cleanId ||
+            a.username.toLowerCase() === cleanId ||
+            a.id.toLowerCase() === cleanId ||
+            a.registrationNo.toLowerCase() === cleanId
+        );
+        if (found) {
+          found.password = newPassword;
+          saveStoredDoctorAccount(found);
+        }
+      }
+    }
     return { success: true as const };
   },
 };
@@ -743,24 +1154,119 @@ export const useDoctorPortal = (): DoctorPortalState => {
 };
 
 export const DoctorPortalProvider: React.FC<{ children: React.ReactNode; initialDoctor: DoctorProfile }> = ({ children, initialDoctor }) => {
-  const [doctor, setDoctor] = useState<DoctorProfile>(initialDoctor);
-  const [activeFacilityId, setActiveFacility] = useState('fac-ghmc');
-  const [credentials, setCredentials] = useState<Credential[]>(seedCredentials);
-  const [affiliations, setAffiliations] = useState<Affiliation[]>(seedAffiliations);
-  const [availability, setAvailability] = useState<AvailabilityRule[]>(seedAvailability);
-  const [exceptions, setExceptions] = useState<AvailabilityException[]>(seedExceptions);
-  const [appointments, setAppointments] = useState<Appointment[]>(seedAppointments);
-  const [telemedicineSessions, setTelemedicineSessions] = useState<TelemedicineSession[]>(seedTelemedicine);
-  const [messages, setMessages] = useState<SecureMessage[]>(seedMessages);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(seedNotifications);
-  const [referrals, setReferrals] = useState<Referral[]>(seedReferrals);
-  const [documents, setDocuments] = useState<PortalDocument[]>(seedDocuments);
-  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(seedAudit);
-  const [sessions, setSessions] = useState<Session[]>(seedSessions);
-  const [delegated, setDelegated] = useState<DelegatedAccess[]>(seedDelegatedAccess);
-  const [tickets, setTickets] = useState<SupportTicket[]>(seedTickets);
-  const [security, setSecurity] = useState<SecurityState>(seedSecurity);
-  const [notificationPrefs, setNotificationPrefs] = useState<Record<string, boolean>>(seedNotificationPrefs);
+  const scopePrefix = `gh_doctor_ws_${initialDoctor.id || 'default'}`;
+  const isFlagshipSeed = initialDoctor.id === seedDoctor.id;
+
+  const loadScoped = <T,>(suffix: string, fallback: T): T => {
+    try {
+      const raw = localStorage.getItem(`${scopePrefix}_${suffix}`);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const defaultCreds: Credential[] = isFlagshipSeed
+    ? seedCredentials
+    : [
+        {
+          id: `cred-${initialDoctor.id}-1`,
+          doctorId: initialDoctor.id,
+          title: `Medical License — ${initialDoctor.specialty}`,
+          authority: initialDoctor.verificationSource || 'National Medical Commission',
+          registrationNumber: (initialDoctor.verificationSource || 'NMC-VERIFIED').split('—').pop()?.trim() || 'NMC-VERIFIED',
+          issuedAt: initialDoctor.createdAt || '2024-01-10',
+          status: initialDoctor.verificationStatus === 'verified' ? 'verified' : 'pending_verification',
+          verifiedAt: initialDoctor.verifiedAt,
+        },
+      ];
+
+  const defaultAppointments: Appointment[] = isFlagshipSeed
+    ? seedAppointments
+    : [
+        {
+          id: `apt-${initialDoctor.id}-1`,
+          patientId: 'pat-1',
+          patientName: 'Aarav Kulkarni',
+          patientAge: 46,
+          patientSex: 'Male',
+          facilityId: 'fac-ghmc',
+          facilityName: 'GlobalHealth Medical Centre — Central Campus',
+          date: new Date().toISOString().slice(0, 10),
+          startTime: '10:00',
+          endTime: '10:30',
+          visitType: 'new_patient',
+          consultationType: 'in_person',
+          status: 'confirmed',
+          checkInStatus: 'checked_in',
+          reason: `${initialDoctor.specialty} consultation & initial evaluation`,
+          notes: `Private workspace appointment for ${initialDoctor.displayName}.`,
+        },
+      ];
+
+  const defaultNotifications: NotificationItem[] = isFlagshipSeed
+    ? seedNotifications
+    : [
+        {
+          id: `ntf-${initialDoctor.id}-1`,
+          category: 'verification',
+          title: `Welcome to your private workspace, ${initialDoctor.displayName}`,
+          body: `Your dedicated ${initialDoctor.specialty} clinical workspace is active and isolated to your account.`,
+          createdAt: 'Just now',
+          read: false,
+          actionView: 'profile',
+        },
+      ];
+
+  const [doctor, setDoctor] = useState<DoctorProfile>(() => loadScoped('profile', initialDoctor));
+  const [activeFacilityId, setActiveFacility] = useState(() => loadScoped('facility', 'fac-ghmc'));
+  const [credentials, setCredentials] = useState<Credential[]>(() => loadScoped('credentials', defaultCreds));
+  const [affiliations, setAffiliations] = useState<Affiliation[]>(() => loadScoped('affiliations', seedAffiliations));
+  const [availability, setAvailability] = useState<AvailabilityRule[]>(() => loadScoped('availability', seedAvailability));
+  const [exceptions, setExceptions] = useState<AvailabilityException[]>(() => loadScoped('exceptions', isFlagshipSeed ? seedExceptions : []));
+  const [appointments, setAppointments] = useState<Appointment[]>(() => loadScoped('appointments', defaultAppointments));
+  const [telemedicineSessions, setTelemedicineSessions] = useState<TelemedicineSession[]>(() =>
+    loadScoped('telemedicine', isFlagshipSeed ? seedTelemedicine : [])
+  );
+  const [messages, setMessages] = useState<SecureMessage[]>(() => loadScoped('messages', isFlagshipSeed ? seedMessages : []));
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => loadScoped('notifications', defaultNotifications));
+  const [referrals, setReferrals] = useState<Referral[]>(() => loadScoped('referrals', isFlagshipSeed ? seedReferrals : []));
+  const [documents, setDocuments] = useState<PortalDocument[]>(() => loadScoped('documents', isFlagshipSeed ? seedDocuments : []));
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(() => loadScoped('audit', isFlagshipSeed ? seedAudit : []));
+  const [sessions, setSessions] = useState<Session[]>(() => loadScoped('sessions', seedSessions));
+  const [delegated, setDelegated] = useState<DelegatedAccess[]>(() => loadScoped('delegated', isFlagshipSeed ? seedDelegatedAccess : []));
+  const [tickets, setTickets] = useState<SupportTicket[]>(() => loadScoped('tickets', isFlagshipSeed ? seedTickets : []));
+  const [security, setSecurity] = useState<SecurityState>(() => loadScoped('security', seedSecurity));
+  const [notificationPrefs, setNotificationPrefs] = useState<Record<string, boolean>>(() =>
+    loadScoped('notif_prefs', seedNotificationPrefs)
+  );
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${scopePrefix}_profile`, JSON.stringify(doctor));
+      const activeSess = getActiveDoctorSession();
+      if (activeSess && activeSess.doctor.id === doctor.id) {
+        setActiveDoctorSession({ ...activeSess, doctor });
+      }
+    } catch {}
+  }, [scopePrefix, doctor]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_facility`, JSON.stringify(activeFacilityId)); } catch {} }, [scopePrefix, activeFacilityId]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_credentials`, JSON.stringify(credentials)); } catch {} }, [scopePrefix, credentials]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_affiliations`, JSON.stringify(affiliations)); } catch {} }, [scopePrefix, affiliations]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_availability`, JSON.stringify(availability)); } catch {} }, [scopePrefix, availability]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_exceptions`, JSON.stringify(exceptions)); } catch {} }, [scopePrefix, exceptions]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_appointments`, JSON.stringify(appointments)); } catch {} }, [scopePrefix, appointments]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_telemedicine`, JSON.stringify(telemedicineSessions)); } catch {} }, [scopePrefix, telemedicineSessions]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_messages`, JSON.stringify(messages)); } catch {} }, [scopePrefix, messages]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_notifications`, JSON.stringify(notifications)); } catch {} }, [scopePrefix, notifications]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_referrals`, JSON.stringify(referrals)); } catch {} }, [scopePrefix, referrals]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_documents`, JSON.stringify(documents)); } catch {} }, [scopePrefix, documents]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_audit`, JSON.stringify(auditEvents)); } catch {} }, [scopePrefix, auditEvents]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_sessions`, JSON.stringify(sessions)); } catch {} }, [scopePrefix, sessions]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_delegated`, JSON.stringify(delegated)); } catch {} }, [scopePrefix, delegated]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_tickets`, JSON.stringify(tickets)); } catch {} }, [scopePrefix, tickets]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_security`, JSON.stringify(security)); } catch {} }, [scopePrefix, security]);
+  useEffect(() => { try { localStorage.setItem(`${scopePrefix}_notif_prefs`, JSON.stringify(notificationPrefs)); } catch {} }, [scopePrefix, notificationPrefs]);
 
   const updateProfile = useCallback((patch: Partial<DoctorProfile>) => {
     setDoctor((prev) => {

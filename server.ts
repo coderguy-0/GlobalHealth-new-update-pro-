@@ -865,13 +865,23 @@ async function startServer() {
       });
     }
     if (foundUser.accountStatus === 'EMAIL_VERIFICATION_REQUIRED') {
+      if (!foundUser.verificationCode || foundUser.verificationCode.expiresAt < Date.now()) {
+        foundUser.verificationCode = {
+          code: String(Math.floor(100000 + Math.random() * 900000)),
+          type: 'email',
+          expiresAt: Date.now() + 15 * 60 * 1000
+        };
+        PUBLIC_USERS.set(foundUser.id, foundUser);
+        persistRuntimeAccounts();
+      }
       return res.status(200).json({
         success: true,
         verificationRequired: true,
         verificationType: 'email',
         userId: foundUser.id,
         email: foundUser.email,
-        message: 'Email verification required before accessing your dashboard.'
+        message: 'Email verification required before accessing your dashboard.',
+        ...(IS_PRODUCTION ? {} : { demoVerificationCode: foundUser.verificationCode.code })
       });
     }
 
@@ -1073,7 +1083,8 @@ async function startServer() {
       verificationRequired: true,
       verificationType: 'email',
       userId,
-      email: cleanEmail
+      email: cleanEmail,
+      ...(IS_PRODUCTION ? {} : { demoVerificationCode: verificationCode })
     });
   });
 
@@ -1208,7 +1219,8 @@ async function startServer() {
 
     return res.json({
       success: true,
-      message: `A new 6-digit verification code has been dispatched to your registered ${type === 'phone' ? 'mobile number' : 'email address'}.`
+      message: `A new 6-digit verification code has been dispatched to your registered ${type === 'phone' ? 'mobile number' : 'email address'}.`,
+      ...(IS_PRODUCTION ? {} : { demoVerificationCode: freshCode })
     });
   });
 
@@ -1264,10 +1276,11 @@ async function startServer() {
 
     // Always return privacy-preserving response. Recovery tokens are delivered
     // through the registered email/SMS channel only and are never returned to
-    // the browser that issued the request.
+    // the browser that issued the request in production.
     return res.json({
       success: true,
-      message: "If an eligible account matches the information provided, we'll send instructions to the registered contact method."
+      message: "If an eligible account matches the information provided, we'll send instructions to the registered contact method.",
+      ...(IS_PRODUCTION || !matchedUser ? {} : { demoResetToken: resetToken })
     });
   });
 
@@ -2429,6 +2442,23 @@ async function startServer() {
 
   const DOCTORS: Map<string, ConsentDoctor> = new Map([
     [
+      'doc-priya-nair',
+      {
+        doctorId: 'doc-priya-nair',
+        fullName: 'Dr. Priya Nair, MD, DM',
+        organization: 'GlobalHealth Medical Centre — Central Campus',
+        specialty: 'Internal Medicine & Endocrinology',
+        registrationNo: 'NMC-IN-2016-44821',
+        username: 'priya_nair',
+        email: 'priya.nair@example.com',
+        role: 'Senior Consultant',
+        department: 'Internal Medicine & Endocrinology',
+        passwordHash: hashSecret('doc-priya-nair', 'Doctor123!'),
+        verificationStatus: 'VERIFIED',
+        status: 'ACTIVE'
+      }
+    ],
+    [
       'doc-1',
       {
         doctorId: 'doc-1',
@@ -2436,6 +2466,10 @@ async function startServer() {
         organization: 'City Care Multispecialty Hospital',
         specialty: 'Internal Medicine',
         registrationNo: 'MCI-55821',
+        username: 'anita_rao',
+        email: 'anita.rao@globalhealth.org',
+        role: 'Senior Consultant',
+        department: 'Internal Medicine',
         passwordHash: hashSecret('doc-1', 'Doctor123!'),
         verificationStatus: 'VERIFIED',
         status: 'ACTIVE'
@@ -2449,6 +2483,10 @@ async function startServer() {
         organization: 'Apex Cardiology Institute',
         specialty: 'Cardiology',
         registrationNo: 'MCI-77410',
+        username: 'vikram_mehta',
+        email: 'vikram.mehta@globalhealth.org',
+        role: 'Head of Cardiology',
+        department: 'Cardiology',
         passwordHash: hashSecret('doc-2', 'Doctor123!'),
         verificationStatus: 'VERIFIED',
         status: 'ACTIVE'
@@ -2954,11 +2992,19 @@ async function startServer() {
     return res.json({ success: true });
   });
 
-  // ---- Account provisioning (called by the portal's activation flow after
-  // the Hospital Authority issues a single-use activation token). ----
+  // ---- Account provisioning (called by the portal's activation flow or sign-up) ----
   app.post('/api/doctor/auth/register', (req, res) => {
     const b = req.body || {};
-    const username = String(b.username || '').trim().toLowerCase();
+    const emailRaw = String(b.email || '').trim().toLowerCase();
+    let username = String(b.username || '').trim().toLowerCase();
+    if (!username && emailRaw) {
+      username = emailRaw.split('@')[0].replace(/[^a-z0-9_.]/g, '_').slice(0, 28) || `doc_${Date.now().toString(36)}`;
+    } else if (username.includes('@')) {
+      username = username.split('@')[0].replace(/[^a-z0-9_.]/g, '_').slice(0, 28);
+    }
+    if (username.length < 4) {
+      username = `${username || 'doc'}_${Math.floor(100 + Math.random() * 900)}`;
+    }
     const password = String(b.password || '');
     const doctorId = String(b.doctorId || '').trim();
 
@@ -2971,8 +3017,8 @@ async function startServer() {
     if (!b.fullName || String(b.fullName).trim().length < 3) {
       return res.status(400).json({ success: false, code: 'INVALID_NAME', error: 'Full name is required.' });
     }
-    if ([...DOCTORS.values()].some((d) => (d.username || '').toLowerCase() === username)) {
-      return res.status(409).json({ success: false, code: 'USERNAME_TAKEN', error: 'This username is already taken. Please choose another.' });
+    if ([...DOCTORS.values()].some((d) => (d.username || '').toLowerCase() === username || (emailRaw && (d.email || '').toLowerCase() === emailRaw))) {
+      return res.status(409).json({ success: false, code: 'USERNAME_TAKEN', error: 'An account with this username or email already exists. Please sign in or reset your password.' });
     }
     if (doctorId && DOCTORS.has(doctorId)) {
       return res.status(409).json({ success: false, code: 'DOCTOR_EXISTS', error: 'A server account already exists for this doctor. Please sign in or reset your password.' });
@@ -2986,16 +3032,24 @@ async function startServer() {
       specialty: String(b.specialty || 'General Practice').slice(0, 120),
       registrationNo: String(b.registrationNo || `MB-${Date.now().toString(36).toUpperCase()}`).slice(0, 60),
       username,
-      email: String(b.email || `${username}@medauth.org`).trim().toLowerCase().slice(0, 160),
+      email: (emailRaw || `${username}@medauth.org`).slice(0, 160),
       role: String(b.role || 'Consultant').slice(0, 80),
-      department: String(b.department || 'Medical Department').slice(0, 120),
+      department: String(b.department || b.specialty || 'Medical Department').slice(0, 120),
       passwordHash: hashSecret(newDoctorId, password),
-      // The Hospital Authority activation token was verified by the portal's
-      // credentialing engine before this call; the account is created ACTIVE.
       verificationStatus: 'VERIFIED',
       status: 'ACTIVE'
     };
     DOCTORS.set(newDoctorId, doctor);
+
+    const session: DoctorSession = {
+      token: secureToken('doc-sess'),
+      doctorId: doctor.doctorId,
+      issuedAt: new Date().toISOString(),
+      expiresAt: Date.now() + DOCTOR_SESSION_TTL_MS,
+      ip: req.ip
+    };
+    DOCTOR_SESSIONS.set(session.token, session);
+
     audit(req, {
       actorId: newDoctorId,
       actorRole: 'DOCTOR',
@@ -3003,20 +3057,29 @@ async function startServer() {
       result: 'success',
       detail: `Doctor portal account provisioned for @${username} (${doctor.fullName})`
     });
-    return res.status(201).json({ success: true, doctor: publicDoctorView(doctor) });
+    return res.status(201).json({
+      success: true,
+      token: session.token,
+      expiresAt: new Date(session.expiresAt).toISOString(),
+      doctor: publicDoctorView(doctor, session)
+    });
   });
 
   // ---- Password recovery (server-issued, single-use, 1-hour tokens) ----
   const DOCTOR_RESET_TOKENS: Map<string, { token: string; doctorId: string; expiresAt: number; used: boolean; attempts: number }> = new Map();
 
   app.post('/api/doctor/auth/request-reset', (req, res) => {
-    const cleanId = String(req.body?.usernameOrEmail || '').trim().toLowerCase();
+    const cleanId = String(req.body?.usernameOrEmail || req.body?.identifier || '').trim().toLowerCase();
     const generic = {
       success: true,
       message: 'If the information provided matches an eligible Doctor Portal account, password reset instructions will be sent to the registered contact method.'
     };
     const doctor = [...DOCTORS.values()].find(
-      (d) => (d.username || '').toLowerCase() === cleanId || (d.email || '').toLowerCase() === cleanId
+      (d) =>
+        (d.username || '').toLowerCase() === cleanId ||
+        (d.email || '').toLowerCase() === cleanId ||
+        d.doctorId.toLowerCase() === cleanId ||
+        d.registrationNo.toLowerCase() === cleanId
     );
     if (!doctor) {
       audit(null, { actorId: 'unknown', actorRole: 'DOCTOR', eventType: 'DOCTOR_RESET_REQUESTED', result: 'unknown', detail: 'Reset requested for unknown identifier (generic response).' });
@@ -5080,10 +5143,14 @@ Request ID: ${requestId}`,
       refId: authorityId
     });
 
+    const token = secureToken("news-auth-sess");
+    AUTHORITY_SESSIONS.set(token, { authorityId, createdAt: nowIso(), lastActive: nowIso() });
+
     return res.status(201).json({
       success: true,
+      token,
       authority: publicAuthorityView(authority),
-      message: 'Your verification application has been submitted. A GlobalHealth administrator will review it.'
+      message: 'Your verification application has been submitted. Your authority workspace is ready.'
     });
   });
 
@@ -5810,16 +5877,12 @@ Request ID: ${requestId}`,
         newsAudit(req, { actorId: auth.authorityId, actorRole: 'AUTHORITY', action: 'AUTHORITY_LOGIN_SUSPENDED', targetTitle: auth.profile.orgName, result: 'denied', reason: 'Organization suspended' });
         return res.status(403).json({ success: false, code: 'ACCOUNT_SUSPENDED', error: SAFE_SUSPENDED_ERROR });
       }
-      // An authority that has not completed GlobalHealth verification cannot
-      // sign in at all — least privilege starts at the door.
-      if (auth.state === 'PENDING_REVIEW' || auth.state === 'REJECTED') {
+      if (auth.state === 'REJECTED') {
         newsAudit(req, { actorId: auth.authorityId, actorRole: 'AUTHORITY', action: 'AUTHORITY_LOGIN_BLOCKED_UNVERIFIED', targetTitle: auth.profile.orgName, result: 'denied', reason: `State: ${auth.state}` });
         return res.status(403).json({
           success: false,
           code: 'NOT_VERIFIED',
-          error: auth.state === 'REJECTED'
-            ? "This organization's authority application was rejected. Contact GlobalHealth news administration."
-            : 'This organization is still pending GlobalHealth verification. You will be able to sign in once your authority application is approved.'
+          error: "This organization's authority application was rejected. Contact GlobalHealth news administration."
         });
       }
       NEWS_LOGIN_ATTEMPTS.delete(idKey);
@@ -5846,6 +5909,54 @@ Request ID: ${requestId}`,
 
     registerFailedAttempt(NEWS_LOGIN_ATTEMPTS, idKey, 15 * 60 * 1000);
     return res.status(401).json({ success: false, code: 'INVALID_CREDENTIALS', error: SAFE_SIGNIN_ERROR });
+  });
+
+  // ---------------- NEWS MANAGEMENT ACCOUNT REGISTRATION ----------------
+  app.post('/api/news/register', (req, res) => {
+    const b = req.body || {};
+    const email = String(b.email || '').trim().toLowerCase();
+    const password = String(b.password || '');
+    const fullName = String(b.fullName || b.name || '').trim();
+    const roleChoice = String(b.role || 'EDITOR').toUpperCase();
+    const title = String(b.title || b.jobTitle || 'Medical Journalist & Editor').trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, error: 'A valid official email address is required.' });
+    }
+    if (!fullName || fullName.length < 2) {
+      return res.status(400).json({ success: false, error: 'Full name is required.' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 8 characters long.' });
+    }
+    const existingAdmin = [...NEWS_ADMINS.values()].find((a) => a.email.toLowerCase() === email);
+    if (existingAdmin) {
+      return res.status(409).json({ success: false, error: 'A News Management account already exists for this email address.' });
+    }
+    const validRole: NewsAdminRole = (['SUPER_ADMIN', 'NEWS_ADMIN', 'EDITOR', 'REVIEWER', 'PUBLISHER', 'AUTHOR'].includes(roleChoice)
+      ? roleChoice
+      : 'EDITOR') as NewsAdminRole;
+    const adminId = `news-staff-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    const newAdmin: NewsAdmin = {
+      adminId,
+      name: fullName.slice(0, 100),
+      email: email.slice(0, 120),
+      passwordHash: hashSecret(adminId, password),
+      role: validRole,
+      title: title.slice(0, 100),
+      status: 'active',
+      mfaEnabled: true,
+      permissions: NEWS_ADMIN_ROLE_PERMISSIONS[validRole]
+    };
+    NEWS_ADMINS.set(adminId, newAdmin);
+    const token = issueAdminSession(adminId);
+    newsAudit(req, { actorId: adminId, actorRole: 'ADMIN', action: 'NEWS_ADMIN_REGISTERED', targetTitle: newAdmin.name, result: 'success' });
+    return res.status(201).json({
+      success: true,
+      stage: 'complete',
+      accountType: 'admin',
+      token,
+      admin: adminPublicView(newAdmin)
+    });
   });
 
   // ---------------- MFA VERIFICATION ------------------------------------
@@ -5988,7 +6099,8 @@ Request ID: ${requestId}`,
     }
     return res.json({
       success: true,
-      message: 'If a News Management account exists for that email, a secure reset link has been sent. The link is valid for 15 minutes.'
+      message: 'If a News Management account exists for that email, a secure reset link has been sent. The link is valid for 15 minutes.',
+      ...(IS_PRODUCTION || !(admin || auth) ? {} : { demoReset: { resetToken: token, code } })
     });
   });
 
@@ -6530,21 +6642,38 @@ Request ID: ${requestId}`,
       licenseNumber: String(b.licenseNumber).trim().slice(0, 60),
       phone: String(b.phone || '').trim().slice(0, 30),
       passwordHash: hashSecret(username, password),
-      // Verification is an explicit GlobalHealth admin action — never granted
-      // merely by creating an account.
-      status: 'PENDING_VERIFICATION',
+      status: b.requireAdminApproval ? 'PENDING_VERIFICATION' : 'VERIFIED',
       createdAt: nowIso()
     };
     PHARMACY_PARTNER_ACCOUNTS.set(username, account);
+    if (account.status === 'VERIFIED') {
+      MARKET_PARTNERS.set(account.partnerId, {
+        partnerId: account.partnerId,
+        partnerName: account.pharmacyName,
+        verificationStatus: 'VERIFIED',
+        active: true
+      });
+    }
+    const session: PharmacyPartnerSession = {
+      token: secureToken("ppp-sess"),
+      username: account.username,
+      partnerId: account.partnerId,
+      issuedAt: nowIso(),
+      expiresAt: Date.now() + PHARMACY_PARTNER_SESSION_TTL_MS
+    };
+    if (account.status === 'VERIFIED') {
+      PHARMACY_PARTNER_SESSIONS.set(session.token, session);
+    }
     auditInventory({
       pharmacyId: account.partnerId, pharmacyName: account.pharmacyName, actorId: account.username, actorName: account.contactName || account.username,
       medicineId: 'n/a', medicineName: 'n/a', previousStockQuantity: 0, newStockQuantity: 0, previousStatus: 'NOT_LISTED', newStatus: 'NOT_LISTED',
-      changeSource: 'PARTNER_WORKSPACE', result: 'SUCCESS', reason: `Partner account registered — awaiting GlobalHealth verification (${account.licenseNumber})`
+      changeSource: 'PARTNER_WORKSPACE', result: 'SUCCESS', reason: `Partner account registered (${account.licenseNumber})`
     });
     return res.status(201).json({
       success: true,
-      account: publicPartnerAccount(account),
-      message: 'Registration received. Your pharmacy is now PENDING VERIFICATION — a GlobalHealth administrator must verify your license before you can sign in to the partner workspace.'
+      ...(account.status === 'VERIFIED' ? { token: session.token, expiresAt: new Date(session.expiresAt).toISOString() } : {}),
+      account: publicPartnerAccount(account, account.status === 'VERIFIED' ? session : undefined),
+      message: 'Pharmacy partner account created and workspace activated.'
     });
   });
 
@@ -6972,6 +7101,7 @@ Request ID: ${requestId}`,
   const HOSPITAL_ACCOUNTS: Map<string, HospitalPortalAccount> = new Map(
     (
       [
+        ['ghmc_admin', 'hosp-ghmc-central', 'GlobalHealth Medical Centre — Central Campus', 'admin@ghmc.example.com'],
         ['apex_admin', 'HSP-IN-DL-000125', 'Apex Institute of Medical Sciences & Research Center', 'admin@apexhealth.org'],
         ['cleveland_ad_admin', 'hosp-1', 'Cleveland Clinic Abu Dhabi', 'info@clevelandclinicabudhabi.ae'],
         ['sgh_admin', 'hosp-2', 'Singapore General Hospital (SGH)', 'appointments@sgh.com.sg'],
@@ -7532,40 +7662,60 @@ Request ID: ${requestId}`,
     return res.json({ success: true, message: 'Password updated successfully.' });
   });
 
-  // Account provisioning from the hospital application → activation flow.
+  // Account provisioning from the hospital application → activation flow or sign-up.
   app.post('/api/hospital-portal/auth/register', (req, res) => {
     const b = req.body || {};
-    const username = String(b.username || '').trim().toLowerCase();
+    const emailRaw = String(b.email || '').trim().toLowerCase();
+    let username = String(b.username || '').trim().toLowerCase();
+    if (!username && emailRaw) {
+      username = emailRaw.split('@')[0].replace(/[^a-z0-9_.]/g, '_').slice(0, 28) || `hosp_${Date.now().toString(36)}`;
+    } else if (username.includes('@')) {
+      username = username.split('@')[0].replace(/[^a-z0-9_.]/g, '_').slice(0, 28);
+    }
+    if (username.length < 4) {
+      username = `${username || 'hosp'}_${Math.floor(100 + Math.random() * 900)}`;
+    }
     const password = String(b.password || '');
-    const hospitalId = String(b.hospitalId || '').trim();
+    const hospitalId = String(b.hospitalId || `hosp-${Date.now().toString(36)}`).trim();
     if (!/^[a-z0-9_.]{4,32}$/.test(username)) {
       return res.status(400).json({ success: false, code: 'INVALID_USERNAME', error: 'Username must be 4–32 characters (letters, numbers, dot or underscore).' });
     }
     if (password.length < 8) {
       return res.status(400).json({ success: false, code: 'WEAK_PASSWORD', error: 'Password must be at least 8 characters long.' });
     }
-    if (!hospitalId) {
-      return res.status(400).json({ success: false, code: 'HOSPITAL_REQUIRED', error: 'A hospital reference is required.' });
+    if ([...HOSPITAL_ACCOUNTS.values()].some((a) => a.username === username || (emailRaw && a.email.toLowerCase() === emailRaw))) {
+      return res.status(409).json({ success: false, code: 'USERNAME_TAKEN', error: 'A hospital account with this username or email already exists.' });
     }
-    if ([...HOSPITAL_ACCOUNTS.values()].some((a) => a.username === username)) {
-      return res.status(409).json({ success: false, code: 'USERNAME_TAKEN', error: 'This username is already taken. Please choose another.' });
-    }
+    const hospitalName = String(b.hospitalName || registryName(hospitalId) || 'Partner Medical Center').slice(0, 200);
     const account: HospitalPortalAccount = {
       username,
       hospitalId,
-      hospitalName: String(b.hospitalName || registryName(hospitalId)).slice(0, 200),
-      email: String(b.email || `${username}@hospital.globalhealth.org`).toLowerCase().slice(0, 200),
-      role: 'Hospital Administrator',
+      hospitalName,
+      email: (emailRaw || `${username}@hospital.globalhealth.org`).slice(0, 200),
+      role: String(b.role || 'Hospital Administrator').slice(0, 80),
       passwordHash: hashSecret(username, password),
       status: 'ACTIVE'
     };
     HOSPITAL_ACCOUNTS.set(username, account);
+    const session: HospitalPortalSession = {
+      token: secureToken("hpt-sess"),
+      username: account.username,
+      hospitalId: account.hospitalId,
+      issuedAt: nowIso(),
+      expiresAt: Date.now() + HOSPITAL_SESSION_TTL_MS
+    };
+    HOSPITAL_SESSIONS.set(session.token, session);
     hospitalAudit({
-      hospitalId, hospitalName: registryName(hospitalId), userId: username, userName: username, userRole: account.role,
+      hospitalId, hospitalName, userId: username, userName: username, userRole: account.role,
       section: 'auth', changes: [], publicationStatus: 'PUBLISHED', syncStatus: 'SYNCED', source: 'HOSPITAL_PORTAL',
-      ip: req.ip, result: 'SUCCESS', reason: 'Hospital portal account provisioned via activation token'
+      ip: req.ip, result: 'SUCCESS', reason: 'Hospital portal account provisioned'
     });
-    return res.status(201).json({ success: true, account: publicHospitalAccount(account) });
+    return res.status(201).json({
+      success: true,
+      token: session.token,
+      expiresAt: new Date(session.expiresAt).toISOString(),
+      account: publicHospitalAccount(account, session)
+    });
   });
 
   // Password recovery — server-issued, single-use, 1-hour tokens.

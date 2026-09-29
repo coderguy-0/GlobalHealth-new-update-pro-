@@ -36,8 +36,10 @@ export const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({
     const result = await forgotPassword(identifier.trim());
     setIsLoading(false);
 
-    // Always transition to privacy-preserving state. The recovery token is not
-    // returned by the server and is entered by the user from their email/SMS.
+    if (result?.demoResetToken) {
+      onRecoveryTokenGenerated?.(result.demoResetToken);
+    }
+
     setIsSubmitted(true);
     onAvatarInteract?.('recover', 'Recovery instructions have been sent.');
   };

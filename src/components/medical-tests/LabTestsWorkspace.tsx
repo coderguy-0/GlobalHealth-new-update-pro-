@@ -83,10 +83,14 @@ export const LabTestsWorkspace: React.FC<LabTestsWorkspaceProps> = ({
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
 
-  // Persistence State (Local Storage)
+  const userScope = currentUser?.id ? `user_${currentUser.id}` : 'guest';
+  const savedTestsStorageKey = `globalhealth_${userScope}_saved_lab_tests`;
+  const labHistoryStorageKey = `globalhealth_${userScope}_lab_history`;
+
+  // Persistence State (Local Storage, scoped per user account)
   const [savedTestIds, setSavedTestIds] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('globalhealth_saved_lab_tests');
+      const saved = localStorage.getItem(savedTestsStorageKey);
       return saved ? JSON.parse(saved) : ['test-lab-1', 'test-lab-2'];
     } catch {
       return ['test-lab-1', 'test-lab-2'];
@@ -95,12 +99,27 @@ export const LabTestsWorkspace: React.FC<LabTestsWorkspaceProps> = ({
 
   const [historyRecords, setHistoryRecords] = useState<SavedLabRecord[]>(() => {
     try {
-      const saved = localStorage.getItem('globalhealth_lab_history');
+      const saved = localStorage.getItem(labHistoryStorageKey);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
     }
   });
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(savedTestsStorageKey);
+      setSavedTestIds(saved ? JSON.parse(saved) : ['test-lab-1', 'test-lab-2']);
+    } catch {
+      setSavedTestIds(['test-lab-1', 'test-lab-2']);
+    }
+    try {
+      const hist = localStorage.getItem(labHistoryStorageKey);
+      setHistoryRecords(hist ? JSON.parse(hist) : []);
+    } catch {
+      setHistoryRecords([]);
+    }
+  }, [savedTestsStorageKey, labHistoryStorageKey]);
 
   const [compareTests, setCompareTests] = useState<MedicalTest[]>([]);
 
@@ -145,7 +164,7 @@ export const LabTestsWorkspace: React.FC<LabTestsWorkspaceProps> = ({
     setSavedTestIds(prev => {
       const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
       try {
-        localStorage.setItem('globalhealth_saved_lab_tests', JSON.stringify(next));
+        localStorage.setItem(savedTestsStorageKey, JSON.stringify(next));
       } catch {}
       return next;
     });
@@ -166,7 +185,7 @@ export const LabTestsWorkspace: React.FC<LabTestsWorkspaceProps> = ({
     setHistoryRecords(prev => {
       const next = [newRec, ...prev];
       try {
-        localStorage.setItem('globalhealth_lab_history', JSON.stringify(next));
+        localStorage.setItem(labHistoryStorageKey, JSON.stringify(next));
       } catch {}
       return next;
     });
@@ -761,7 +780,7 @@ export const LabTestsWorkspace: React.FC<LabTestsWorkspaceProps> = ({
         onRemoveSavedTest={(id) => toggleSaveTest(id)}
         onClearHistory={() => {
           setHistoryRecords([]);
-          try { localStorage.removeItem('globalhealth_lab_history'); } catch {}
+          try { localStorage.removeItem(labHistoryStorageKey); } catch {}
         }}
         onAskAI={onAskAI}
       />
