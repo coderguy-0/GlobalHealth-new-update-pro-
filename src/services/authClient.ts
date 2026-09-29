@@ -15,13 +15,20 @@ export const GLOBAL_SESSION_KEYS = [
   'globalhealth_pharmacy_session',
   'gh_pharmacy_session_token',
   'globalhealth_partner_session',
+  'gh_pharmacy_partner_session_v1',
+  'gh_pharmacy_portal_active_scope_v1',
+  'gh_pharmacy_portal_active_account_v1',
   // Hospital portal
   'globalhealth_hospital_session',
   'gh_hospital_session_token',
+  'gh_hospital_portal_session_v1',
+  'gh_hospital_portal_session_v1_token',
   // Doctor / MedAuth portal
   'globalhealth_doctor_session',
   'globalhealth_doctor_token',
   'gh_doctor_session_token',
+  'gh_doctor_portal_session_v1',
+  'gh_doctor_consent_session_v2',
   'globalhealth_medauth_session',
   'doctor_portal_session_token_v1',
   'doctor_portal_session_expiry_v1',
@@ -30,6 +37,10 @@ export const GLOBAL_SESSION_KEYS = [
   // News / editorial
   'globalhealth_news_session',
   'gh_news_session_token',
+  'gh_staff_session_v3',
+  'globalhealth_news_admin_token',
+  'globalhealth_news_admin_profile',
+  'globalhealth_news_authority_token',
   // Community & saved/locale identity caches are NOT secret, but clear them so
   // a logout never leaves stale per-user UI state behind.
   'globalhealth_localization_cache',

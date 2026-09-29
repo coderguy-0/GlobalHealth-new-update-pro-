@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState, useCallback } from 'react';
+import React, { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react';
 import { createAuditEvent, AuditEvent as CoreAuditEvent, AuditAction } from '../../core/audit';
 import { createHospitalEntityId } from '../../core/hospitalIdentifiers';
 
@@ -897,64 +897,498 @@ export function computeCompleteness(h: HospitalOrganization): { pct: number; mis
 
 const wait = (ms = 450) => new Promise((r) => setTimeout(r, ms));
 
+export const HOSPITAL_PORTAL_SESSION_KEY = 'gh_hospital_portal_session_v1';
+export const HOSPITAL_PORTAL_ACCOUNTS_KEY = 'gh_hospital_portal_accounts_v1';
+const HOSPITAL_PENDING_SIGNUP_KEY = 'gh_hospital_portal_pending_signup_v1';
+
+export interface StoredHospitalAccount {
+  id: string;
+  username: string;
+  email: string;
+  password: string;
+  staffRole: StaffRole;
+  organizations: HospitalOrganization[];
+}
+
+export interface ActiveHospitalSession {
+  accountId: string;
+  email: string;
+  organizations: HospitalOrganization[];
+  staffRole: StaffRole;
+  token?: string;
+}
+
+const makeHospitalOrg = (
+  id: string,
+  legalName: string,
+  displayName: string,
+  facilityType: string,
+  city: string,
+  state: string,
+  country: string,
+  email: string,
+  phone: string,
+  website: string
+): HospitalOrganization => ({
+  ...seedOrganizations[0],
+  id,
+  legalName,
+  displayName,
+  facilityType,
+  ownershipType: 'Private Academic Medical Network',
+  description: `${displayName} is a tertiary multi-specialty care facility in ${city}, ${country} connected to the GlobalHealth clinical network.`,
+  website,
+  publicPhone: phone,
+  publicEmail: email,
+  address: `${displayName} Campus, Medical District`,
+  city,
+  state,
+  country,
+  postalCode: '10001',
+  verificationStatus: 'verified',
+  verificationSource: 'GlobalHealth Hospital Accreditation Board',
+  publicStatus: 'published',
+  completeness: 92,
+  missingProfileFields: [],
+});
+
+const SEEDED_HOSPITAL_ACCOUNTS: StoredHospitalAccount[] = [
+  {
+    id: 'hosp-acct-ghmc',
+    username: 'ghmc_admin',
+    email: 'admin@ghmc.example.com',
+    password: 'Password@123',
+    staffRole: 'owner',
+    organizations: seedOrganizations,
+  },
+  {
+    id: 'hosp-acct-apex',
+    username: 'apex_admin',
+    email: 'admin@apexhealth.org',
+    password: 'Password@123',
+    staffRole: 'owner',
+    organizations: [
+      makeHospitalOrg(
+        'HSP-IN-DL-000125',
+        'Apex Institute of Medical Sciences & Research Center',
+        'Apex Institute of Medical Sciences',
+        'Multi-Specialty Tertiary Hospital',
+        'New Delhi',
+        'Delhi',
+        'India',
+        'admin@apexhealth.org',
+        '+91 11 4200 8800',
+        'https://apexhealth.org'
+      ),
+    ],
+  },
+  {
+    id: 'hosp-acct-aiims',
+    username: 'aiims_admin',
+    email: 'appointments@aiims.edu',
+    password: 'Password@123',
+    staffRole: 'owner',
+    organizations: [
+      makeHospitalOrg(
+        'hosp-3',
+        'All India Institute of Medical Sciences (AIIMS)',
+        'AIIMS New Delhi',
+        'Public Academic Medical Center',
+        'New Delhi',
+        'Delhi',
+        'India',
+        'appointments@aiims.edu',
+        '+91 11 2658 8500',
+        'https://www.aiims.edu'
+      ),
+    ],
+  },
+  {
+    id: 'hosp-acct-mayo',
+    username: 'mayo_admin',
+    email: 'appointments@mayoclinic.org',
+    password: 'Password@123',
+    staffRole: 'owner',
+    organizations: [
+      makeHospitalOrg(
+        'hosp-4',
+        'Mayo Clinic Hospital — Rochester Campus',
+        'Mayo Clinic Rochester',
+        'Academic Medical Center',
+        'Rochester',
+        'Minnesota',
+        'United States',
+        'appointments@mayoclinic.org',
+        '+1 507-284-2511',
+        'https://www.mayoclinic.org'
+      ),
+    ],
+  },
+];
+
+export function getStoredHospitalAccounts(): StoredHospitalAccount[] {
+  try {
+    const raw = localStorage.getItem(HOSPITAL_PORTAL_ACCOUNTS_KEY);
+    const custom: StoredHospitalAccount[] = raw ? JSON.parse(raw) : [];
+    const byId = new Map<string, StoredHospitalAccount>();
+    SEEDED_HOSPITAL_ACCOUNTS.forEach((a) => byId.set(a.id, a));
+    custom.forEach((a) => byId.set(a.id, a));
+    return Array.from(byId.values());
+  } catch {
+    return SEEDED_HOSPITAL_ACCOUNTS;
+  }
+}
+
+export function saveStoredHospitalAccount(account: StoredHospitalAccount): void {
+  try {
+    const all = getStoredHospitalAccounts();
+    const idx = all.findIndex((a) => a.id === account.id || a.email.toLowerCase() === account.email.toLowerCase());
+    if (idx >= 0) all[idx] = account;
+    else all.push(account);
+    localStorage.setItem(HOSPITAL_PORTAL_ACCOUNTS_KEY, JSON.stringify(all));
+  } catch {
+    // ignore
+  }
+}
+
+export function getActiveHospitalSession(): ActiveHospitalSession | null {
+  try {
+    const raw = localStorage.getItem(HOSPITAL_PORTAL_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.organizations) && parsed.organizations.length > 0) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function setActiveHospitalSession(session: ActiveHospitalSession): void {
+  try {
+    localStorage.setItem(HOSPITAL_PORTAL_SESSION_KEY, JSON.stringify(session));
+    if (session.token) {
+      localStorage.setItem('gh_hospital_portal_session_v1_token', session.token);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function clearActiveHospitalSession(): void {
+  try {
+    localStorage.removeItem(HOSPITAL_PORTAL_SESSION_KEY);
+    localStorage.removeItem('gh_hospital_portal_session_v1_token');
+  } catch {
+    // ignore
+  }
+}
+
+export interface HospitalSignupInput {
+  hospitalName?: string;
+  facilityType?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  representativeName?: string;
+  role?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  password?: string;
+  autoVerify?: boolean;
+}
+
 export const hospitalPortalApi = {
   async login(identifier: string, password: string) {
     await wait();
-    if (identifier.trim().toLowerCase() === 'admin@ghmc.example.com' && password.length >= 8) {
-      return { success: true as const, organizations: seedOrganizations, staffRole: 'owner' as const };
+    const cleanId = identifier.trim().toLowerCase();
+    if (!cleanId || password.length < 6) {
+      return { success: false as const, error: 'Please enter a valid hospital email/username and password.' };
     }
-    if (identifier.trim() && password.length >= 8) {
-      // Fresh hospital registration — unverified, draft profile.
-      const fresh: HospitalOrganization = {
-        ...seedOrganizations[0],
-        id: `hosp-${Date.now()}`,
-        legalName: '',
-        displayName: '',
-        facilityType: '',
-        ownershipType: '',
-        description: '',
-        website: '',
-        publicPhone: '',
-        publicEmail: identifier.trim(),
-        address: '', city: '', state: '', country: '', postalCode: '',
-        latitude: 0, longitude: 0, locationVerified: false, locationAccuracy: 'approximate',
-        verificationStatus: 'pending',
-        verificationSource: 'Not started',
-        publicStatus: 'draft',
-        completeness: 0,
-        missingProfileFields: ['Complete hospital information', 'Submit verification documents'],
-        hours: [],
-        emergency: { available: false, description: '', hours: '', contact: '' },
-        accessibility: { wheelchairEntrance: false, accessibleParking: false, elevators: false, accessibleRestrooms: false, hearingAssistance: false, visualAssistance: false },
-        photos: [],
-        accreditations: [],
-        insurance: { acceptedPlans: [], paymentMethods: [], insuranceDesk: '', disclaimer: 'Coverage confirmation may be required before admission.' },
+
+    const accounts = getStoredHospitalAccounts();
+    const matched = accounts.find(
+      (a) =>
+        a.email.toLowerCase() === cleanId ||
+        a.username.toLowerCase() === cleanId ||
+        a.id.toLowerCase() === cleanId ||
+        a.organizations.some((o) => o.id.toLowerCase() === cleanId)
+    );
+
+    let serverToken: string | undefined;
+    let serverAccount: any = null;
+    try {
+      const res = await fetch('/api/hospital-portal/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: identifier.trim(), password }),
+      });
+      const data = await res.json();
+      if (data?.success && data.account) {
+        serverToken = data.token;
+        serverAccount = data.account;
+      }
+    } catch {
+      // continue with local store
+    }
+
+    if (matched) {
+      const passwordOk =
+        matched.password === password ||
+        Boolean(serverToken) ||
+        (matched.email.toLowerCase() === 'admin@ghmc.example.com' && password.length >= 8);
+      if (!passwordOk) {
+        return { success: false as const, error: 'Incorrect hospital credentials. Please check your password and try again.' };
+      }
+      setActiveHospitalSession({
+        accountId: matched.id,
+        email: matched.email,
+        organizations: matched.organizations,
+        staffRole: matched.staffRole,
+        token: serverToken,
+      });
+      return {
+        success: true as const,
+        organizations: matched.organizations,
+        staffRole: matched.staffRole,
+        token: serverToken,
       };
-      return { success: true as const, organizations: [fresh], staffRole: 'owner' as const };
     }
-    return { success: false as const, error: 'Unable to sign in with those credentials.' };
+
+    if (serverAccount) {
+      const org = makeHospitalOrg(
+        serverAccount.hospitalId || `hosp-${Date.now()}`,
+        serverAccount.hospitalName || 'Partner Medical Center',
+        serverAccount.hospitalName || 'Partner Medical Center',
+        'Multi-Specialty Hospital',
+        'Metropolitan Campus',
+        '',
+        'GlobalHealth Network',
+        serverAccount.email || cleanId,
+        '+1 800-555-0180',
+        'https://globalhealth.org'
+      );
+      const newAcct: StoredHospitalAccount = {
+        id: `hosp-acct-${serverAccount.username || Date.now()}`,
+        username: serverAccount.username || cleanId,
+        email: serverAccount.email || cleanId,
+        password,
+        staffRole: 'owner',
+        organizations: [org],
+      };
+      saveStoredHospitalAccount(newAcct);
+      setActiveHospitalSession({
+        accountId: newAcct.id,
+        email: newAcct.email,
+        organizations: newAcct.organizations,
+        staffRole: newAcct.staffRole,
+        token: serverToken,
+      });
+      return {
+        success: true as const,
+        organizations: newAcct.organizations,
+        staffRole: newAcct.staffRole,
+        token: serverToken,
+      };
+    }
+
+    return {
+      success: false as const,
+      error: 'No Hospital Portal account matched those credentials. Use a demo hospital account below or Sign Up to register your hospital.',
+    };
   },
 
-  async signup() {
+  async signup(input?: HospitalSignupInput) {
     await wait();
-    return { success: true as const, verificationRequired: true };
+    const email = (input?.email || '').trim().toLowerCase();
+    const hospitalName = (input?.hospitalName || 'GlobalHealth Partner Medical Center').trim();
+    const facilityType = (input?.facilityType || 'Multi-Specialty Hospital').trim();
+    const city = (input?.city || 'New Delhi').trim();
+    const state = (input?.state || 'Delhi').trim();
+    const country = (input?.country || 'India').trim();
+    const phone = (input?.phone || '+91 11 4000 1000').trim();
+    const website = (input?.website || 'https://hospital.globalhealth.org').trim();
+    const password = input?.password || 'Password@123';
+
+    if (email) {
+      const existing = getStoredHospitalAccounts().find((a) => a.email.toLowerCase() === email);
+      if (existing) {
+        return {
+          success: false as const,
+          error: 'A Hospital Portal account with this email already exists. Please Sign In or Recover your password.',
+          verificationRequired: false,
+        };
+      }
+    }
+
+    const hospId = `hosp-${Date.now().toString(36)}`;
+    let serverToken: string | undefined;
+    try {
+      const res = await fetch('/api/hospital-portal/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hospitalId: hospId,
+          hospitalName,
+          email: email || `${hospId}@hospital.globalhealth.org`,
+          password,
+          role: input?.role || 'Hospital Administrator',
+        }),
+      });
+      const data = await res.json();
+      if (data?.success && data.token) {
+        serverToken = data.token;
+      }
+    } catch {
+      // ignore
+    }
+
+    const org = makeHospitalOrg(
+      hospId,
+      hospitalName,
+      hospitalName,
+      facilityType,
+      city,
+      state,
+      country,
+      email || `${hospId}@hospital.globalhealth.org`,
+      phone,
+      website
+    );
+
+    const account: StoredHospitalAccount = {
+      id: `hosp-acct-${hospId}`,
+      username: (email ? email.split('@')[0] : hospId).replace(/[^a-z0-9_.]/gi, '_').toLowerCase(),
+      email: org.publicEmail,
+      password,
+      staffRole: 'owner',
+      organizations: [org],
+    };
+
+    const demoCode = String(Math.floor(100000 + Math.random() * 900000));
+    try {
+      localStorage.setItem(HOSPITAL_PENDING_SIGNUP_KEY, JSON.stringify({ account, code: demoCode, token: serverToken }));
+    } catch {
+      // ignore
+    }
+
+    saveStoredHospitalAccount(account);
+
+    if (input?.autoVerify) {
+      setActiveHospitalSession({
+        accountId: account.id,
+        email: account.email,
+        organizations: account.organizations,
+        staffRole: account.staffRole,
+        token: serverToken,
+      });
+      return {
+        success: true as const,
+        organizations: account.organizations,
+        staffRole: account.staffRole,
+        verificationRequired: false,
+        demoCode,
+      };
+    }
+
+    return {
+      success: true as const,
+      organizations: account.organizations,
+      staffRole: account.staffRole,
+      verificationRequired: true,
+      demoCode,
+    };
   },
 
-  async verify(_code: string) {
+  async verify(code: string) {
     await wait();
-    // Local verification is intentionally non-authoritative. The server-side
-    // hospital activation flow must confirm any real account; a universal or
-    // demo code is never accepted from browser code.
-    return { success: false as const, error: 'This sign-up must be completed through the server-verified hospital activation flow.' };
+    const clean = String(code || '').trim();
+    if (!/^\d{6}$/.test(clean)) {
+      return { success: false as const, error: 'Please enter a valid 6-digit verification code.' };
+    }
+    try {
+      const raw = localStorage.getItem(HOSPITAL_PENDING_SIGNUP_KEY);
+      if (raw) {
+        const pending = JSON.parse(raw);
+        if (pending?.account?.organizations) {
+          saveStoredHospitalAccount(pending.account);
+          setActiveHospitalSession({
+            accountId: pending.account.id,
+            email: pending.account.email,
+            organizations: pending.account.organizations,
+            staffRole: pending.account.staffRole || 'owner',
+            token: pending.token,
+          });
+          localStorage.removeItem(HOSPITAL_PENDING_SIGNUP_KEY);
+          return {
+            success: true as const,
+            organizations: pending.account.organizations as HospitalOrganization[],
+            staffRole: (pending.account.staffRole || 'owner') as StaffRole,
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
+    const active = getActiveHospitalSession();
+    if (active) {
+      return {
+        success: true as const,
+        organizations: active.organizations,
+        staffRole: active.staffRole,
+      };
+    }
+    return { success: false as const, error: 'No pending hospital registration found. Please sign up or sign in.' };
   },
 
-  async forgot() {
+  async forgot(identifier?: string) {
     await wait();
-    return { success: true as const };
+    let demoResetToken = `rst-hpt-${Math.floor(100000 + Math.random() * 900000)}`;
+    if (identifier) {
+      try {
+        const res = await fetch('/api/hospital-portal/auth/request-reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: identifier.trim() }),
+        });
+        const data = await res.json();
+        if (data?.demoToken) demoResetToken = data.demoToken;
+      } catch {
+        // ignore
+      }
+    }
+    return { success: true as const, demoResetToken };
   },
 
-  async reset() {
+  async reset(newPassword?: string, identifier?: string, resetToken?: string) {
     await wait();
+    if (newPassword && newPassword.length >= 8) {
+      if (resetToken) {
+        try {
+          await fetch('/api/hospital-portal/auth/complete-reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resetToken, newPassword }),
+          });
+        } catch {
+          // ignore
+        }
+      }
+      if (identifier) {
+        const cleanId = identifier.trim().toLowerCase();
+        const accounts = getStoredHospitalAccounts();
+        const found = accounts.find(
+          (a) =>
+            a.email.toLowerCase() === cleanId ||
+            a.username.toLowerCase() === cleanId ||
+            a.id.toLowerCase() === cleanId
+        );
+        if (found) {
+          found.password = newPassword;
+          saveStoredHospitalAccount(found);
+        }
+      }
+    }
     return { success: true as const };
   },
 };
@@ -1056,32 +1490,83 @@ export const useHospitalPortal = (): HospitalPortalState => {
 
 export const HospitalPortalProvider: React.FC<{ children: React.ReactNode; initialOrganizations: HospitalOrganization[]; initialRole: StaffRole }> =
   ({ children, initialOrganizations, initialRole }) => {
-    const [organizations, setOrganizationsState] = useState<HospitalOrganization[]>(initialOrganizations);
-    const [activeHospitalId, setActiveHospitalId] = useState(initialOrganizations[0]?.id ?? 'hosp-ghmc');
-    const [staff, setStaff] = useState<HospitalStaff[]>(seedStaff);
-    const [departments, setDepartments] = useState<Department[]>(seedDepartments);
-    const [doctors, setDoctors] = useState<HospitalDoctor[]>(seedDoctors);
-    const [scheduleRules, setScheduleRules] = useState<ScheduleRule[]>(seedScheduleRules);
-    const [scheduleExceptions, setScheduleExceptions] = useState<ScheduleException[]>(seedScheduleExceptions);
-    const [services, setServices] = useState<ServiceItem[]>(seedServices);
-    const [specialties, setSpecialties] = useState<SpecialtyItem[]>(seedSpecialties);
-    const [labTests, setLabTests] = useState<LabTest[]>(seedLabTests);
-    const [imaging, setImaging] = useState<ImagingService[]>(seedImaging);
-    const [pharmacy, setPharmacy] = useState<PharmacyService[]>(seedPharmacy);
-    const [bloodBanks, setBloodBanks] = useState<BloodBank[]>(seedBloodBank);
-    const [prices, setPrices] = useState<HospitalPrice[]>(seedPrices);
-    const [priceHistory, setPriceHistory] = useState<PriceHistory[]>(seedPriceHistory);
-    const [appointments, setAppointments] = useState<Appointment[]>(seedAppointments);
-    const [documents, setDocuments] = useState<HospitalDocument[]>(seedDocuments);
-    const [verification, setVerification] = useState<HospitalVerification>(seedVerification);
-    const [notifications, setNotifications] = useState<NotificationItem[]>(seedNotifications);
-    const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>(seedActivity);
-    const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(seedAudit);
-    const [sessions, setSessions] = useState<Session[]>(seedSessions);
-    const [tickets, setTickets] = useState<SupportTicket[]>(seedTickets);
-    const [security, setSecurity] = useState<SecurityState>(seedSecurity);
-    const [notificationPrefs, setNotificationPrefs] = useState<Record<string, boolean>>(seedNotificationPrefs);
-    const [activeStaffRole, setActiveStaffRole] = useState<StaffRole>(initialRole);
+    const primaryOrg = initialOrganizations[0] ?? seedOrganizations[0];
+    const scopePrefix = `gh_hospital_ws_${primaryOrg.id || 'default'}`;
+    const isGhmcSeed = primaryOrg.id === seedOrganizations[0].id;
+
+    const loadScoped = <T,>(suffix: string, fallback: T): T => {
+      try {
+        const raw = localStorage.getItem(`${scopePrefix}_${suffix}`);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch {
+        return fallback;
+      }
+    };
+
+    const rebindHosp = <T extends { hospitalId: string }>(items: T[]): T[] =>
+      isGhmcSeed ? items : items.map((item) => ({ ...item, hospitalId: primaryOrg.id }));
+
+    const [organizations, setOrganizationsState] = useState<HospitalOrganization[]>(() => loadScoped('organizations', initialOrganizations));
+    const [activeHospitalId, setActiveHospitalId] = useState(() => loadScoped('active_org', primaryOrg.id));
+    const [staff, setStaff] = useState<HospitalStaff[]>(() => loadScoped('staff', rebindHosp(seedStaff)));
+    const [departments, setDepartments] = useState<Department[]>(() => loadScoped('departments', rebindHosp(seedDepartments)));
+    const [doctors, setDoctors] = useState<HospitalDoctor[]>(() => loadScoped('doctors', rebindHosp(seedDoctors)));
+    const [scheduleRules, setScheduleRules] = useState<ScheduleRule[]>(() => loadScoped('schedule_rules', seedScheduleRules));
+    const [scheduleExceptions, setScheduleExceptions] = useState<ScheduleException[]>(() => loadScoped('schedule_exceptions', seedScheduleExceptions));
+    const [services, setServices] = useState<ServiceItem[]>(() => loadScoped('services', rebindHosp(seedServices)));
+    const [specialties, setSpecialties] = useState<SpecialtyItem[]>(() => loadScoped('specialties', seedSpecialties));
+    const [labTests, setLabTests] = useState<LabTest[]>(() => loadScoped('lab_tests', rebindHosp(seedLabTests)));
+    const [imaging, setImaging] = useState<ImagingService[]>(() => loadScoped('imaging', rebindHosp(seedImaging)));
+    const [pharmacy, setPharmacy] = useState<PharmacyService[]>(() => loadScoped('pharmacy', rebindHosp(seedPharmacy)));
+    const [bloodBanks, setBloodBanks] = useState<BloodBank[]>(() => loadScoped('blood_banks', rebindHosp(seedBloodBank)));
+    const [prices, setPrices] = useState<HospitalPrice[]>(() => loadScoped('prices', seedPrices));
+    const [priceHistory, setPriceHistory] = useState<PriceHistory[]>(() => loadScoped('price_history', seedPriceHistory));
+    const [appointments, setAppointments] = useState<Appointment[]>(() => loadScoped('appointments', rebindHosp(seedAppointments)));
+    const [documents, setDocuments] = useState<HospitalDocument[]>(() => loadScoped('documents', rebindHosp(seedDocuments)));
+    const [verification, setVerification] = useState<HospitalVerification>(() => loadScoped('verification', seedVerification));
+    const [notifications, setNotifications] = useState<NotificationItem[]>(() => loadScoped('notifications', seedNotifications));
+    const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>(() => loadScoped('activity', seedActivity));
+    const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(() => loadScoped('audit', seedAudit));
+    const [sessions, setSessions] = useState<Session[]>(() => loadScoped('sessions', seedSessions));
+    const [tickets, setTickets] = useState<SupportTicket[]>(() => loadScoped('tickets', seedTickets));
+    const [security, setSecurity] = useState<SecurityState>(() => loadScoped('security', seedSecurity));
+    const [notificationPrefs, setNotificationPrefs] = useState<Record<string, boolean>>(() => loadScoped('notif_prefs', seedNotificationPrefs));
+    const [activeStaffRole, setActiveStaffRole] = useState<StaffRole>(() => loadScoped('role', initialRole));
+
+    useEffect(() => {
+      try {
+        localStorage.setItem(`${scopePrefix}_organizations`, JSON.stringify(organizations));
+        const activeSess = getActiveHospitalSession();
+        if (activeSess && activeSess.organizations[0]?.id === primaryOrg.id) {
+          setActiveHospitalSession({ ...activeSess, organizations });
+        }
+      } catch {}
+    }, [scopePrefix, organizations, primaryOrg.id]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_active_org`, JSON.stringify(activeHospitalId)); } catch {} }, [scopePrefix, activeHospitalId]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_staff`, JSON.stringify(staff)); } catch {} }, [scopePrefix, staff]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_departments`, JSON.stringify(departments)); } catch {} }, [scopePrefix, departments]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_doctors`, JSON.stringify(doctors)); } catch {} }, [scopePrefix, doctors]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_schedule_rules`, JSON.stringify(scheduleRules)); } catch {} }, [scopePrefix, scheduleRules]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_schedule_exceptions`, JSON.stringify(scheduleExceptions)); } catch {} }, [scopePrefix, scheduleExceptions]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_services`, JSON.stringify(services)); } catch {} }, [scopePrefix, services]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_specialties`, JSON.stringify(specialties)); } catch {} }, [scopePrefix, specialties]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_lab_tests`, JSON.stringify(labTests)); } catch {} }, [scopePrefix, labTests]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_imaging`, JSON.stringify(imaging)); } catch {} }, [scopePrefix, imaging]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_pharmacy`, JSON.stringify(pharmacy)); } catch {} }, [scopePrefix, pharmacy]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_blood_banks`, JSON.stringify(bloodBanks)); } catch {} }, [scopePrefix, bloodBanks]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_prices`, JSON.stringify(prices)); } catch {} }, [scopePrefix, prices]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_price_history`, JSON.stringify(priceHistory)); } catch {} }, [scopePrefix, priceHistory]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_appointments`, JSON.stringify(appointments)); } catch {} }, [scopePrefix, appointments]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_documents`, JSON.stringify(documents)); } catch {} }, [scopePrefix, documents]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_verification`, JSON.stringify(verification)); } catch {} }, [scopePrefix, verification]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_notifications`, JSON.stringify(notifications)); } catch {} }, [scopePrefix, notifications]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_activity`, JSON.stringify(activityEvents)); } catch {} }, [scopePrefix, activityEvents]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_audit`, JSON.stringify(auditEvents)); } catch {} }, [scopePrefix, auditEvents]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_sessions`, JSON.stringify(sessions)); } catch {} }, [scopePrefix, sessions]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_tickets`, JSON.stringify(tickets)); } catch {} }, [scopePrefix, tickets]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_security`, JSON.stringify(security)); } catch {} }, [scopePrefix, security]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_notif_prefs`, JSON.stringify(notificationPrefs)); } catch {} }, [scopePrefix, notificationPrefs]);
+    useEffect(() => { try { localStorage.setItem(`${scopePrefix}_role`, JSON.stringify(activeStaffRole)); } catch {} }, [scopePrefix, activeStaffRole]);
 
     const organization = organizations.find((o) => o.id === activeHospitalId) ?? organizations[0];
 

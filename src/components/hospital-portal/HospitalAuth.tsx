@@ -15,6 +15,9 @@ export const HospitalAuth: React.FC<HospitalAuthProps> = ({ onBackToGlobalHealth
   const [phase, setPhase] = useState<Phase>('login');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+  const [demoCode, setDemoCode] = useState<string | undefined>(undefined);
+  const [resetIdentifier, setResetIdentifier] = useState('');
+  const [resetToken, setResetToken] = useState<string | undefined>(undefined);
 
   // Deep-link support: #hospital-portal/login|signup|forgot-password|reset-password|verify
   useEffect(() => {
@@ -33,16 +36,21 @@ export const HospitalAuth: React.FC<HospitalAuthProps> = ({ onBackToGlobalHealth
     else setError(res.error || 'Unable to sign in.');
   };
 
-  const handleSignup = async () => {
-    const res = await hospitalPortalApi.signup();
-    if (res.success) { go('verify'); setInfo('A 6-digit verification code was sent to your registered email.'); }
+  const handleSignup = async (details?: { hospitalName?: string; email?: string; password?: string; representativeName?: string; phone?: string; role?: string }) => {
+    const res = await hospitalPortalApi.signup(details);
+    if (res.success) {
+      if (res.demoCode) setDemoCode(res.demoCode);
+      go('verify');
+      setInfo('A 6-digit verification code was sent to your registered email.');
+    } else {
+      setError(res.error || 'Unable to create hospital account.');
+    }
   };
 
   const handleVerify = async (code: string) => {
     const res = await hospitalPortalApi.verify(code);
     if (res.success) {
-      go('login');
-      setInfo('Account verified. Sign in to register your hospital.');
+      onLoginSuccess(res.organizations, res.staffRole);
     } else {
       setError(res.error || 'The verification code is invalid or has expired.');
     }
@@ -105,9 +113,29 @@ export const HospitalAuth: React.FC<HospitalAuthProps> = ({ onBackToGlobalHealth
 
             {phase === 'login' && <LoginForm onLogin={handleLogin} onCreate={() => go('signup')} onForgot={() => go('forgot')} onContactSupport={() => go('signup')} />}
             {phase === 'signup' && <SignupForm onSignup={handleSignup} onBack={() => go('login')} onVerify={() => go('verify')} />}
-            {phase === 'forgot' && <ForgotForm onBack={() => go('login')} onSent={() => { go('login'); setInfo("If an account exists for that email, we've sent a password reset link. Check your inbox (demo: the flow completes locally)."); }} />}
-            {phase === 'reset' && <ResetForm onBack={() => go('login')} onDone={() => { go('login'); setInfo('Password updated. All other sessions were signed out. Sign in with your new password.'); }} />}
-            {phase === 'verify' && <VerifyForm onVerify={handleVerify} onBack={() => go('signup')} />}
+            {phase === 'forgot' && (
+              <ForgotForm
+                onBack={() => go('login')}
+                onSent={(email, token) => {
+                  setResetIdentifier(email);
+                  if (token) setResetToken(token);
+                  go('reset');
+                  setInfo('Enter your new password below to complete hospital account recovery.');
+                }}
+              />
+            )}
+            {phase === 'reset' && (
+              <ResetForm
+                identifier={resetIdentifier}
+                resetToken={resetToken}
+                onBack={() => go('login')}
+                onDone={() => {
+                  go('login');
+                  setInfo('Password updated. All other sessions were signed out. Sign in with your new password.');
+                }}
+              />
+            )}
+            {phase === 'verify' && <VerifyForm demoCode={demoCode} onVerify={handleVerify} onBack={() => go('signup')} />}
           </div>
         </div>
       </main>
@@ -198,7 +226,12 @@ const calculateStrength = (pw: string): { score: number; label: string; color: s
   return { score, label, color };
 };
 
-const SignupForm: React.FC<{ onSignup: () => void; onBack: () => void; onVerify: () => void }> = ({ onSignup, onBack, onVerify }) => {
+const SignupForm: React.FC<{
+  onSignup: (details: { hospitalName?: string; email?: string; password?: string; representativeName?: string; phone?: string; role?: string }) => void;
+  onBack: () => void;
+  onVerify: () => void;
+}> = ({ onSignup, onBack, onVerify }) => {
+  const [hospitalName, setHospitalName] = useState('');
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
@@ -209,18 +242,30 @@ const SignupForm: React.FC<{ onSignup: () => void; onBack: () => void; onVerify:
   const strength = calculateStrength(pw);
 
   const submit = () => {
+    if (!hospitalName.trim()) { setErr('Enter your hospital or facility name.'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setErr('Enter a valid official work email.'); return; }
-    if (strength.score < 3) { setErr('Password is too weak — use 8+ characters with mixed case, numbers and symbols.'); return; }
+    if (pw.length < 8) { setErr('Password must be at least 8 characters.'); return; }
     if (pw !== pw2) { setErr('Passwords do not match.'); return; }
     if (!repName.trim() || !phone.trim()) { setErr('Representative name and phone are required.'); return; }
     setErr('');
-    onSignup();
+    onSignup({
+      hospitalName: hospitalName.trim(),
+      email: email.trim(),
+      password: pw,
+      representativeName: repName.trim(),
+      phone: phone.trim(),
+      role,
+    });
   };
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); submit(); }} noValidate>
       <LogoRow heading="Register Your Hospital" />
       <div className="space-y-3.5">
+        <div>
+          <label className={labelCls} htmlFor="hs-hospname">Hospital / Facility Legal Name</label>
+          <input id="hs-hospname" value={hospitalName} onChange={(e) => setHospitalName(e.target.value)} className={inputCls} placeholder="e.g., St. Mary Multi-Specialty Hospital" />
+        </div>
         <div>
           <label className={labelCls} htmlFor="hs-email">Official work email</label>
           <input id="hs-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} placeholder="admin@hospital.example.com" />
@@ -283,16 +328,16 @@ const maskEmail = (e: string) => {
   return `${local.slice(0, 2)}••••@${domain}`;
 };
 
-const ForgotForm: React.FC<{ onBack: () => void; onSent: () => void }> = ({ onBack, onSent }) => {
+const ForgotForm: React.FC<{ onBack: () => void; onSent: (email: string, token?: string) => void }> = ({ onBack, onSent }) => {
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const submit = async () => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setErr('Enter a valid work email.'); return; }
     setErr(''); setBusy(true);
-    await hospitalPortalApi.forgot();
+    const res = await hospitalPortalApi.forgot(email);
     setBusy(false);
-    onSent();
+    onSent(email, res.demoResetToken);
   };
   return (
     <form onSubmit={(e) => { e.preventDefault(); submit(); }} noValidate>
@@ -313,15 +358,15 @@ const ForgotForm: React.FC<{ onBack: () => void; onSent: () => void }> = ({ onBa
   );
 };
 
-const ResetForm: React.FC<{ onBack: () => void; onDone: () => void }> = ({ onBack, onDone }) => {
+const ResetForm: React.FC<{ identifier?: string; resetToken?: string; onBack: () => void; onDone: () => void }> = ({ identifier, resetToken, onBack, onDone }) => {
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
   const [err, setErr] = useState('');
   const strength = calculateStrength(pw);
   const submit = async () => {
-    if (strength.score < 3) { setErr('Password is too weak.'); return; }
+    if (pw.length < 8) { setErr('Password must be at least 8 characters.'); return; }
     if (pw !== pw2) { setErr('Passwords do not match.'); return; }
-    await hospitalPortalApi.reset();
+    await hospitalPortalApi.reset(pw, identifier, resetToken);
     onDone();
   };
   return (
@@ -352,7 +397,7 @@ const ResetForm: React.FC<{ onBack: () => void; onDone: () => void }> = ({ onBac
   );
 };
 
-const VerifyForm: React.FC<{ onVerify: (code: string) => void; onBack: () => void }> = ({ onVerify, onBack }) => {
+const VerifyForm: React.FC<{ demoCode?: string; onVerify: (code: string) => void; onBack: () => void }> = ({ demoCode, onVerify, onBack }) => {
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
   const [attempts, setAttempts] = useState(0);
@@ -376,7 +421,22 @@ const VerifyForm: React.FC<{ onVerify: (code: string) => void; onBack: () => voi
     <form onSubmit={(e) => { e.preventDefault(); submit(); }} noValidate>
       <LogoRow heading="Verify your email" />
       <div className="space-y-4">
-        <p className="text-xs text-slate-500">Enter the 6-digit code sent to {maskEmail('admin@example.com')}. Codes expire after 10 minutes.</p>
+        <p className="text-xs text-slate-500">Enter the 6-digit code sent to your registered hospital email. Codes expire after 10 minutes.</p>
+        {demoCode && (
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            <div>
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-amber-700">Simulated Verification Code</span>
+              <span className="font-mono font-bold text-sm">{demoCode}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCode(demoCode.slice(0, 6))}
+              className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 transition cursor-pointer"
+            >
+              Auto-fill
+            </button>
+          </div>
+        )}
         <div>
           <label className={labelCls} htmlFor="hp-code">Verification code</label>
           <input
@@ -392,7 +452,7 @@ const VerifyForm: React.FC<{ onVerify: (code: string) => void; onBack: () => voi
           />
         </div>
         {err && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs font-semibold text-rose-800">{err}</p>}
-        <button type="submit" className="w-full cursor-pointer rounded-xl bg-medical-600 py-2.5 text-sm font-bold text-white shadow-md shadow-medical-600/20 transition hover:bg-medical-700">Verify</button>
+        <button type="submit" className="w-full cursor-pointer rounded-xl bg-medical-600 py-2.5 text-sm font-bold text-white shadow-md shadow-medical-600/20 transition hover:bg-medical-700">Verify &amp; Enter Workspace</button>
         <div className="flex items-center justify-between text-xs">
           <button type="button" onClick={onBack} className="cursor-pointer font-bold text-slate-500 hover:underline">Back</button>
           <button type="button" disabled={cooldown > 0} onClick={() => setCooldown(30)} className="cursor-pointer font-bold text-medical-700 hover:underline disabled:opacity-50">

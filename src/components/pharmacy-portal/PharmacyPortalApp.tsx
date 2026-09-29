@@ -139,6 +139,7 @@ export const PharmacyPortalApp: React.FC<PharmacyPortalAppProps> = ({
       const me = await fetchPartnerMe();
       if (cancelled) return;
       if (me.ok && me.account) {
+        PharmacyPortalService.setActiveWorkspaceScope(me.account.partnerId, me.account);
         const staffList = PharmacyPortalService.getStaff();
         const staffUser =
           staffList.find((x) => x.email.toLowerCase() === me.account!.username.toLowerCase()) || staffList[0] || null;
@@ -149,6 +150,7 @@ export const PharmacyPortalApp: React.FC<PharmacyPortalAppProps> = ({
         }
       } else {
         clearPartnerSession();
+        PharmacyPortalService.clearActiveWorkspaceScope();
         setSessionExpired(true);
       }
       setSessionRestoring(false);
@@ -187,6 +189,7 @@ export const PharmacyPortalApp: React.FC<PharmacyPortalAppProps> = ({
         'Auth'
       );
     }
+    PharmacyPortalService.clearActiveWorkspaceScope();
     setCurrentUser(null);
     setScreen('landing');
   };
@@ -328,6 +331,7 @@ export const PharmacyPortalApp: React.FC<PharmacyPortalAppProps> = ({
             if (!result.ok || !result.account) {
               return { success: false, error: result.error || 'Incorrect pharmacy partner credentials.' };
             }
+            PharmacyPortalService.setActiveWorkspaceScope(result.account.partnerId, result.account);
             // Map the verified partner identity onto the workspace staff
             // profile (created on first sign-in for newly verified partners).
             const email = result.account.username.toLowerCase();

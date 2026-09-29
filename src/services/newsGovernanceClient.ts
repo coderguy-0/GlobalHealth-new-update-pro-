@@ -110,8 +110,18 @@ export async function newsAuthorityRegister(input: {
   description: string;
   verificationReason: string;
   password: string;
-}): Promise<{ success: boolean; message: string }> {
+}): Promise<{ success: boolean; message: string; token?: string; authority?: any }> {
   return newsFetch('/api/news/authority/register', { method: 'POST', body: input, token: null });
+}
+
+export async function newsStaffRegister(input: {
+  fullName: string;
+  email: string;
+  role?: string;
+  title?: string;
+  password: string;
+}): Promise<{ success: boolean; token?: string; admin?: ServerAdmin; error?: string }> {
+  return newsFetch('/api/news/register', { method: 'POST', body: input, token: null });
 }
 
 export async function newsFetch<T = any>(path: string, options: GovOptions): Promise<T> {
