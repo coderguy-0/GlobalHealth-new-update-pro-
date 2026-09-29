@@ -36,6 +36,7 @@ import { NavigationTab, UserAccount } from '../types';
 import { LanguageSelector } from './LanguageSelector';
 import { MoreOverlay } from './MoreOverlay';
 import { EmergencyModal } from './EmergencyModal';
+import { ThemeToggle } from './enhancements/ThemeToggle';
 import { useLocalization } from '../context/LocalizationContext';
 
 interface NavbarProps {
@@ -251,6 +252,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Search className="h-4.5 w-4.5" />
             </button>
 
+            <ThemeToggle compact />
+
             <LanguageSelector compact />
 
             {currentUser ? (
@@ -354,10 +357,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Mobile actions */}
             <div className="flex lg:hidden items-center gap-1.5">
+              <ThemeToggle compact />
               <button
                 type="button"
                 onClick={focusHeroSearch}
-                className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-500"
+                className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-300"
                 aria-label="Search"
               >
                 <Search className="h-4.5 w-4.5" />

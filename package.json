@@ -4,38 +4,45 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "NODE_ENV=production node dist/server.cjs",
-    "clean": "rm -rf dist server.js",
-    "lint": "node --max-old-space-size=4096 node_modules/typescript/bin/tsc --noEmit",
+    "dev": "node scripts/dev.mjs",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/server.cjs",
+    "start": "node scripts/start.mjs",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true});require('node:fs').rmSync('server.js',{force:true})\"",
     "test": "node --import tsx --test 'src/**/*.test.ts'",
     "test:unit": "node --import tsx --test 'src/server/*.test.ts'",
     "accept:ai": "node scripts/acceptance/globalhealth-ai-auth-chat.mjs",
     "ai:report": "node --import tsx scripts/ai-public-index-report.mjs",
     "ai:eval": "node --import tsx scripts/ai-retrieval-eval.mjs",
     "ai:doctor": "node --import tsx scripts/ai-doctor.mjs",
-    "ai:questions": "node --import tsx scripts/ai-question-pack.mjs"
+    "ai:questions": "node --import tsx scripts/ai-question-pack.mjs",
+    "build:debug": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "typecheck": "node --max-old-space-size=4096 node_modules/typescript/bin/tsc --noEmit",
+    "verify": "npm run typecheck && npm test && npm run build",
+    "deploy:check": "node scripts/deploy-check.mjs",
+    "deploy:docker": "docker build -t globalhealth:latest .",
+    "lint": "npm run typecheck",
+    "heroku-postbuild": "npm run build && npm run deploy:check"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
-    "@tailwindcss/vite": "^4.1.14",
     "@types/leaflet": "^1.9.22",
-    "@vitejs/plugin-react": "^5.0.4",
+    "compression": "^1.8.2",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",
-    "react-dom": "^19.0.1",
-    "vite": "^6.2.3"
+    "react-dom": "^19.0.1"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/compression": "^1.8.1",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^4.1.14",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
@@ -45,5 +52,9 @@
   },
   "overrides": {
     "qs": "^6.16.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   }
 }

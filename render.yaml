@@ -1,0 +1,56 @@
+# =============================================================================
+# Render blueprint — https://render.com/docs/blueprint-spec
+#
+# Deploy:  Render Dashboard → New → Blueprint → pick this repo.
+# Render reads this file and provisions the service, disk and health check.
+# =============================================================================
+
+services:
+  - type: web
+    name: globalhealth
+    runtime: node
+    plan: starter
+    region: oregon
+    branch: main
+    # --include=dev is required: Vite, esbuild and TypeScript are build-time
+    # dependencies, and Render sets NODE_ENV=production during the build.
+    buildCommand: npm ci --include=dev && npm run build && npm run deploy:check
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Node 20+ is required by Vite 6 and React 19.
+      - key: NODE_VERSION
+        value: "22"
+      # Load-balancer-friendly: the server must bind 0.0.0.0 (it does).
+      - key: PORT
+        value: "3000"
+
+      # Persisted runtime state (accounts, consent, domain data). Render mounts
+      # this disk and GH_RUNTIME_DIR tells the server to write there, so state
+      # survives restarts and deploys. Without it every deploy wipes accounts.
+      - key: GH_RUNTIME_DIR
+        value: /var/data
+
+      # ---- Secrets: set these in the Render dashboard, never in git ----
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: PRESCRIPTION_SIGNING_SECRET
+        generateValue: true
+      - key: GH_ADMIN_KEY
+        generateValue: true
+      - key: MEDAUTH_REGISTRY_URL
+        sync: false
+      - key: MEDAUTH_REGISTRY_SECRET
+        sync: false
+      # Leave unset for a single-origin deploy (SPA + API on this service).
+      # Set to your public origin only if the UI is hosted elsewhere.
+      - key: CORS_ORIGIN
+        sync: false
+
+    disk:
+      name: globalhealth-data
+      mountPath: /var/data
+      sizeGB: 1

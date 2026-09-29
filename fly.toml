@@ -1,0 +1,56 @@
+# =============================================================================
+# Fly.io configuration — https://fly.io/docs/reference/configuration/
+#
+#   fly launch --no-deploy --copy-config
+#   fly volumes create globalhealth_data --size 1
+#   fly secrets set GEMINI_API_KEY=... PRESCRIPTION_SIGNING_SECRET=...
+#   fly deploy
+#
+# A single machine is the right default: session state and the runtime
+# persistence layer are per-instance until the database migration lands
+# (see docs/migration-plan.md). Scale vertically, not horizontally.
+# =============================================================================
+
+app = "globalhealth"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  GH_RUNTIME_DIR = "/app/data"
+
+# One always-on machine that survives restarts. Remove min_machines_running
+# and set auto_stop_machines if you prefer scale-to-zero (cold starts apply).
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  # Cheap liveness check; deep readiness is exposed at /readyz.
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/healthz"
+
+# Durable storage for account/consent/domain state — this must match
+# GH_RUNTIME_DIR above or state is lost whenever the machine is replaced.
+[[mounts]]
+  source = "globalhealth_data"
+  destination = "/app/data"
+  initial_size = "1gb"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

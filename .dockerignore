@@ -1,0 +1,46 @@
+# Keep the build context small and never leak local state or secrets.
+
+# Dependencies are installed inside the image from the lockfile.
+node_modules
+**/node_modules
+
+# Build output is produced inside the image.
+dist
+build
+server.js
+
+# Local secrets must never enter an image layer.
+.env
+.env.*
+!.env.example
+
+# Runtime patient/account state — lives in a volume, never in the image.
+data
+data/runtime
+
+# Version control and CI config (the CI workflow itself is documentation only)
+.git
+.gitignore
+.github
+
+# Editor / OS noise
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# Logs and coverage
+*.log
+npm-debug.log*
+coverage
+.nyc_output
+
+# Docs and screenshots are not needed to build or run the server.
+docs
+*.md
+!README.md
+
+# Local tooling caches
+.cache
+.turbo
+.tmp

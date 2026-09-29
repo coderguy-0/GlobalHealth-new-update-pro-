@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavigationTab, UserAccount } from '../../types';
 import { HeroSection } from '../HeroSection';
+import { LiveHealthPulse } from '../enhancements/LiveHealthPulse';
 import { PrimaryActions } from './PrimaryActions';
 import { SymptomTriageNavigator } from './SymptomTriageNavigator';
 import { DoctorsSection } from './DoctorsSection';
@@ -13,7 +14,9 @@ import { EcosystemSection } from './EcosystemSection';
 import { ExploreHealthSection } from './ExploreHealthSection';
 import { UpdatesSection } from './UpdatesSection';
 import { CommunitySection } from './CommunitySection';
+import { TestimonialsSection } from './TestimonialsSection';
 import { TrustSection } from './TrustSection';
+import { FaqSection } from './FaqSection';
 import { PersonalHealthSpace } from './PersonalHealthSpace';
 import { FinalCtaSection } from './FinalCtaSection';
 
@@ -38,6 +41,9 @@ export const HomePage: React.FC<HomePageProps> = ({
     <div className="space-y-0">
       {/* 1. Hero & Universal Search Matrix */}
       <HeroSection onTabChange={onTabChange} />
+
+      {/* 1b. Live platform telemetry ticker */}
+      <LiveHealthPulse />
 
       {/* 2. Rapid Access Action Matrix (8 Symmetrical Gateways) */}
       <PrimaryActions onTabChange={onTabChange} />
@@ -77,6 +83,12 @@ export const HomePage: React.FC<HomePageProps> = ({
 
       {/* 14. MedAuth™ Trust, Clinical Rigor & Privacy Architecture */}
       <TrustSection />
+
+      {/* 14b. Voices from the network — clinician & patient stories */}
+      <TestimonialsSection onTabChange={onTabChange} />
+
+      {/* 14c. Frequently asked questions (with FAQPage structured data) */}
+      <FaqSection onTabChange={onTabChange} />
 
       {/* 15. Personal Health Space, FHIR EHR & Authenticated Vault */}
       <PersonalHealthSpace onTabChange={onTabChange} currentUser={currentUser} onOpenAuth={onOpenAuth} />
