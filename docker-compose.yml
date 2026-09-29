@@ -1,0 +1,53 @@
+# =============================================================================
+# Production-parity stack for local verification.
+#
+#   docker compose up --build
+#   open http://localhost:3000
+#
+# This runs the same image that ships to production, with the same volume
+# layout, so `docker compose up` is a faithful rehearsal of a real deploy.
+# =============================================================================
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: globalhealth:local
+    container_name: globalhealth
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      # Must match the volume mount below, or state is lost on every restart.
+      GH_RUNTIME_DIR: /app/data
+      # Optional integrations — export these in your shell before `up`,
+      # or leave unset and the features degrade safely.
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      MEDAUTH_REGISTRY_URL: ${MEDAUTH_REGISTRY_URL:-}
+      MEDAUTH_REGISTRY_SECRET: ${MEDAUTH_REGISTRY_SECRET:-}
+      PRESCRIPTION_SIGNING_SECRET: ${PRESCRIPTION_SIGNING_SECRET:-}
+      GH_ADMIN_KEY: ${GH_ADMIN_KEY:-}
+    volumes:
+      # Durable runtime state: accounts, consent tokens, domain data.
+      - globalhealth-data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    # The container runs as the unprivileged `node` user and writes nothing
+    # outside /app/data, so the default seccomp/cap profile is sufficient.
+    security_opt:
+      - "no-new-privileges:true"
+
+volumes:
+  globalhealth-data:

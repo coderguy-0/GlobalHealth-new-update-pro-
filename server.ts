@@ -3,10 +3,14 @@
 // visible to the server and the AI Assistant fails with a 500.
 import 'dotenv/config';
 import express from 'express';
+import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
 import { createHash, createHmac, randomBytes } from 'crypto';
-import { createServer as createViteServer } from 'vite';
+// NOTE: Vite is intentionally NOT imported at module scope. It is a build/dev
+// tool, and a static import forced the production runtime image to install it
+// (plus its dependency tree) even though `npm start` never touches it. The dev
+// branch below loads it dynamically instead.
 import { PHARMACY_PRODUCTS, VERIFIED_PHARMACY_PARTNERS } from './src/data/pharmacyProductsData';
 import { INITIAL_HOSPITALS, INITIAL_DEPARTMENTS, INITIAL_PORTAL_DOCTORS, INITIAL_BLOOD_BANK } from './src/data/hospitalInitialData';
 import { detectSafetyRisk } from './src/core/ai/aiSafety';
@@ -31,8 +35,16 @@ async function startServer() {
   const config = loadRuntimeConfig(process.env);
   const app = express();
   const logger = createLogger('server');
+  // Resolve the runtime state directory.
+  //
+  // GH_RUNTIME_DIR may be absolute (the normal case on a container platform:
+  // `/app/data` on Docker, `/var/data` on Render) or relative (the local-dev
+  // default `data`). path.join would happily CONCATENATE an absolute value onto
+  // the cwd — turning `/app/data` into `/app/app/data` — which silently writes
+  // outside the mounted volume so all account/consent state is lost on the next
+  // restart. path.resolve treats an absolute segment as a new root instead.
   const appDir = process.cwd();
-  const RUNTIME_DIR = path.join(appDir, config.runtimeDir, 'runtime');
+  const RUNTIME_DIR = path.resolve(appDir, config.runtimeDir, 'runtime');
   const readJsonFile = <T>(file: string, fallback: T): T => {
     try {
       if (!fs.existsSync(file)) return fallback;
@@ -78,6 +90,34 @@ async function startServer() {
   // High payload parser for base64 medical certificate uploads
   app.use(express.json({ limit: '15mb' }));
   app.use(express.urlencoded({ extended: true }));
+
+  // ----------------------------------------------------------------------
+  // Response compression.
+  //
+  // The clinical datasets ship as multi-megabyte JS chunks; without this the
+  // production SPA re-downloads them uncompressed on first visit (e.g. the
+  // nutrition library is 10.6MB raw but ~419KB gzipped). This handles
+  // Accept-Encoding negotiation and Vary bookkeeping. There are no
+  // SSE/streaming endpoints on this server, so buffering is safe.
+  // ----------------------------------------------------------------------
+  app.use(
+    compression({
+      // Don't compress tiny bodies where the gzip frame costs more than it
+      // saves, or media that is already compressed.
+      threshold: 1024,
+      filter: (req, res) => {
+        if (req.headers['x-no-compression']) return false;
+        const type = String(res.getHeader('Content-Type') || '');
+        if (/^(image\/(png|jpe?g|webp|gif|avif)|video\/|audio\/|application\/(zip|gzip|pdf))/.test(type)) {
+          return false;
+        }
+        return compression.filter(req, res);
+      },
+    })
+  );
+
+  // The Express fingerprint is a free hint for anyone probing the stack.
+  app.disable('x-powered-by');
 
   // Enterprise request identity + basic security headers.
   app.use((req, res, next) => {
@@ -150,7 +190,14 @@ async function startServer() {
   // Readiness probe (safe for orchestrators/load balancers). It does not expose
   // secrets or internal architecture; it only confirms the HTTP server and
   // runtime persistence directory are usable.
-  app.get('/api/ready', (req, res) => {
+  // Readiness/health probes.
+  //
+  // Exposed under both `/api/*` (application clients) and the root-level
+  // `/healthz` + `/readyz` aliases, because most orchestrators (Kubernetes,
+  // Cloud Run, Render, Fly.io, Railway) default to root-level probe paths and
+  // asking operators to rename things is a needless deployment papercut.
+  // Neither probe exposes secrets or internal architecture.
+  const readinessHandler = (req: any, res: any) => {
     const runtimeWritable = (() => {
       try {
         fs.mkdirSync(RUNTIME_DIR, { recursive: true });
@@ -165,6 +212,18 @@ async function startServer() {
     return res.status(runtimeWritable ? 200 : 503).json({
       success: runtimeWritable,
       status: runtimeWritable ? 'READY' : 'NOT_READY',
+      timestamp: new Date().toISOString(),
+      uptimeSeconds: Math.floor(process.uptime()),
+      requestId: req.requestId,
+    });
+  };
+
+  app.get('/api/ready', readinessHandler);
+  app.get('/readyz', readinessHandler);
+  app.get('/healthz', (req, res) => {
+    return res.json({
+      success: true,
+      status: 'HEALTHY',
       timestamp: new Date().toISOString(),
       uptimeSeconds: Math.floor(process.uptime()),
       requestId: (req as any).requestId,
@@ -8367,6 +8426,8 @@ ${buildPolicyBlock()}${langInstruction}${identityInstruction}${
   // 7. Vite Dev Server / SPA Static Fallback
   // ----------------------------------------------------------------------
   if (!IS_PRODUCTION) {
+    // Loaded on demand so the production install can omit Vite entirely.
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true, allowedHosts: true },
       appType: 'spa',
@@ -8374,15 +8435,62 @@ ${buildPolicyBlock()}${langInstruction}${identityInstruction}${
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(appDir, 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+
+    // --------------------------------------------------------------------
+    // Static asset delivery.
+    //
+    // Vite emits content-hashed filenames (index-B729XwAW.js), so those are
+    // immutable by construction and can be cached for a year. Everything
+    // that must NOT be cached is excluded explicitly: a stale `sw.js` would
+    // pin visitors to an old deployment, and a stale `index.html` would
+    // reference hashed bundles that no longer exist after a deploy.
+    // --------------------------------------------------------------------
+    // Vite emits content-hashed filenames as `assets/[name]-[hash][extname]`
+    // (e.g. index-B729XwAW.js), so anything matching that shape is immutable
+    // by construction. The hash segment is base64url-ish, hence [A-Za-z0-9_-].
+    // Non-hashed files (logo-final.js) correctly do NOT match and fall through
+    // to the short-cache branch below.
+    const IMMUTABLE = /[/\\]assets[/\\][^/\\]*-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$/;
+
+    app.use(
+      express.static(distPath, {
+        setHeaders: (res, filePath) => {
+          const name = path.basename(filePath);
+
+          if (name === 'sw.js') {
+            // Revalidate so a new deployment takes over immediately.
+            res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+            res.setHeader('Service-Worker-Allowed', '/');
+            return;
+          }
+          if (name === 'index.html' || name === 'manifest.webmanifest') {
+            res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+            return;
+          }
+          if (IMMUTABLE.test(filePath)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+            return;
+          }
+          // Un-hashed brand assets: cache briefly, then revalidate.
+          res.setHeader('Cache-Control', 'public, max-age=3600, must-revalidate');
+        },
+      })
+    );
+
+    const sendIndex = (req: any, res: any) => {
       const indexPath = path.join(distPath, 'index.html');
-      if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-      } else {
-        res.send('MedAuth & GlobalHealth Engine: Building client assets.');
+      if (!fs.existsSync(indexPath)) {
+        return res
+          .status(503)
+          .type('text/plain')
+          .send('GlobalHealth is still building its client assets. Please retry shortly.');
       }
-    });
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+      return res.sendFile(indexPath);
+    };
+
+    app.get('/', sendIndex);
+    app.get('*', sendIndex);
   }
 
   app.listen(PORT, '0.0.0.0', () => {
