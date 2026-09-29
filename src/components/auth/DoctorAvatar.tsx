@@ -118,7 +118,7 @@ export const DoctorAvatar: React.FC<DoctorAvatarProps> = ({
           {/* Circular frame */}
           <circle cx="120" cy="120" r="116" fill="url(#ghAvBg)" />
           <circle cx="120" cy="120" r="113" fill="none" stroke="#ffffff" strokeWidth="5" />
-          <circle cx="120" cy="120" r="105" fill="none" stroke="#b9d7e3" strokeOpacity="0.55" strokeWidth="1.5" />
+          <circle cx="120" cy="120" r="105" fill="none" stroke="#b3dffc" strokeOpacity="0.55" strokeWidth="1.5" />
 
           {/* Whole character gently breathes */}
           <g className="gh-av-body">
@@ -132,23 +132,23 @@ export const DoctorAvatar: React.FC<DoctorAvatarProps> = ({
             {/* Coat lapels */}
             <path d="M104 152 L120 178 L136 152" fill="#f4f8fb" stroke="#c9d9e6" strokeWidth="2" />
             {/* Buttons */}
-            <circle cx="120" cy="186" r="2.6" fill="#b9d7e3" />
-            <circle cx="120" cy="197" r="2.6" fill="#b9d7e3" />
+            <circle cx="120" cy="186" r="2.6" fill="#b3dffc" />
+            <circle cx="120" cy="197" r="2.6" fill="#b3dffc" />
             {/* ID badge with medical cross */}
             <g>
-              <rect x="140" y="160" width="24" height="15" rx="4" fill="#ffffff" stroke="#8dbccf" strokeWidth="1.4" />
-              <path d="M150 163.5 h4 v3 h3 v4 h-3 v3 h-4 v-3 h-3 v-4 h3 Z" fill="#2f6a85" />
+              <rect x="140" y="160" width="24" height="15" rx="4" fill="#ffffff" stroke="#76c5f7" strokeWidth="1.4" />
+              <path d="M150 163.5 h4 v3 h3 v4 h-3 v3 h-4 v-3 h-3 v-4 h3 Z" fill="#0a6db8" />
             </g>
             {/* Stethoscope */}
             <path
               d="M92 148 Q92 132 104 130 Q116 128 116 140"
               fill="none"
-              stroke="#2f6a85"
+              stroke="#0a6db8"
               strokeWidth="3"
               strokeLinecap="round"
             />
-            <circle cx="116" cy="143" r="5" fill="#2f6a85" stroke="#1e3a49" strokeWidth="1.5" />
-            <path d="M116 143 L110 150" stroke="#2f6a85" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="116" cy="143" r="5" fill="#0a6db8" stroke="#103c62" strokeWidth="1.5" />
+            <path d="M116 143 L110 150" stroke="#0a6db8" strokeWidth="2" strokeLinecap="round" />
 
             {/* Left arm (resting) */}
             <path d="M70 158 Q58 172 56 192 Q55 198 62 200 Q70 201 74 194 Q80 178 82 166 Z" fill="#f7fafc" stroke="#dce6ee" strokeWidth="1.6" />
@@ -159,8 +159,8 @@ export const DoctorAvatar: React.FC<DoctorAvatarProps> = ({
             </g>
             {/* Privacy shield held by the raised arm */}
             <g className="gh-av-shield">
-              <path d="M178 150 L188 145 L191 153 Q191 162 183 165 Q175 162 175 153 Z" fill="#daeaf0" stroke="#2f6a85" strokeWidth="1.6" />
-              <path d="M183 151 v7 M180 154 h6" stroke="#2f6a85" strokeWidth="1.6" strokeLinecap="round" />
+              <path d="M178 150 L188 145 L191 153 Q191 162 183 165 Q175 162 175 153 Z" fill="#dceffd" stroke="#0a6db8" strokeWidth="1.6" />
+              <path d="M183 151 v7 M180 154 h6" stroke="#0a6db8" strokeWidth="1.6" strokeLinecap="round" />
             </g>
 
             {/* Head group — subtle rotation/tilt per expression */}

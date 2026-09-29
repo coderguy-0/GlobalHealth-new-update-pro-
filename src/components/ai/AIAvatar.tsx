@@ -28,9 +28,9 @@ export const AIAvatar: React.FC<AIAvatarProps> = ({ size = 64, showStatus = fals
     >
       <defs>
         <linearGradient id="gh-ai-bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#3d829e" />
-          <stop offset="55%" stopColor="#2f6a85" />
-          <stop offset="100%" stopColor="#1e3a49" />
+          <stop offset="0%" stopColor="#36a6ef" />
+          <stop offset="55%" stopColor="#0a6db8" />
+          <stop offset="100%" stopColor="#103c62" />
         </linearGradient>
         <clipPath id="gh-ai-circle">
           <circle cx="60" cy="60" r="60" />
@@ -96,7 +96,7 @@ export const AIAvatar: React.FC<AIAvatarProps> = ({ size = 64, showStatus = fals
 
         {/* Pocket + medical cross */}
         <path d="M42 96 h12 v9 h-12 z" fill="#dbe7ee" />
-        <path d="M47 99 h4 M45 101 h8" stroke="#2f6a85" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M47 99 h4 M45 101 h8" stroke="#0a6db8" strokeWidth="1.8" strokeLinecap="round" />
       </g>
     </svg>
 
