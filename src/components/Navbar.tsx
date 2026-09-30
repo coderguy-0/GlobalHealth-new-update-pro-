@@ -19,10 +19,8 @@ import {
   ChevronDown,
   Calculator,
   Calendar,
-  ShoppingBag,
   FileSpreadsheet,
   History,
-  FileHeart,
   Search,
   Salad,
   Activity,
@@ -489,31 +487,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 );
               })}
             </nav>
-
-            {/* Account & workspaces */}
-            <div className="mt-4 border-t border-slate-100 pt-3">
-              <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Account &amp; workspaces</p>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button type="button" onClick={() => go('dashboard', 'dashboard')} className="flex items-center gap-2 rounded-xl bg-teal-50 p-2.5 text-xs font-semibold text-teal-900">
-                  <FileHeart className="h-4 w-4 text-teal-600" /> Health Records
-                </button>
-                <button type="button" onClick={() => go('doctor-portal')} className="flex items-center gap-2 rounded-xl bg-emerald-50 p-2.5 text-xs font-semibold text-emerald-900">
-                  <Stethoscope className="h-4 w-4 text-emerald-600" /> Doctor Portal
-                </button>
-                <button type="button" onClick={() => go('hospital-portal')} className="flex items-center gap-2 rounded-xl bg-indigo-50 p-2.5 text-xs font-semibold text-indigo-900">
-                  <Building2 className="h-4 w-4 text-indigo-600" /> Hospital Portal
-                </button>
-                <button type="button" onClick={() => go('pharmacy-portal')} className="flex items-center gap-2 rounded-xl bg-teal-50 p-2.5 text-xs font-semibold text-teal-900">
-                  <ShoppingBag className="h-4 w-4 text-teal-600" /> Pharmacy Porter
-                </button>
-                <button type="button" onClick={() => go('news-management')} className="flex items-center gap-2 rounded-xl bg-purple-50 p-2.5 text-xs font-semibold text-purple-900">
-                  <Newspaper className="h-4 w-4 text-purple-600" /> News Management
-                </button>
-                <button type="button" onClick={() => go('appointments')} className="flex items-center gap-2 rounded-xl bg-slate-100 p-2.5 text-xs font-semibold text-slate-700">
-                  <Calendar className="h-4 w-4 text-slate-500" /> Appointments
-                </button>
-              </div>
-            </div>
 
             {/* Bottom utilities */}
             <div className="mt-4 flex items-center gap-2">
