@@ -16,6 +16,8 @@ export const GLOBAL_SESSION_KEYS = [
   'gh_pharmacy_session_token',
   'globalhealth_partner_session',
   'gh_pharmacy_partner_session_v1',
+  'pharmacy_partner_session_token_v1',
+  'gh_pharmacy_portal_auth_state',
   'gh_pharmacy_portal_active_scope_v1',
   'gh_pharmacy_portal_active_account_v1',
   // Hospital portal
@@ -88,6 +90,64 @@ export function clearAllGlobalSessions() {
       .forEach((k) => localStorage.removeItem(k));
   } catch {
     // storage unavailable — nothing to clear
+  }
+}
+
+/**
+ * Storage keys whose presence means SOME GlobalHealth identity is signed in
+ * on this device — the User Portal account or a professional portal workspace
+ * (Doctor / Hospital / Pharmacy / News). Used by the visitor entry wall so a
+ * professional who signed in through their own portal is not bounced back to
+ * the front-door sign-in card.
+ *
+ * Deliberately excludes profile copies, locale/community caches and bare
+ * scope markers so a signed-out guest can never accidentally satisfy the wall.
+ */
+const ENTRY_SESSION_MARKER_KEYS = [
+  // User Portal (patient accounts)
+  'globalhealth_auth_token',
+  // Doctor / MedAuth portals
+  'gh_doctor_portal_session_v1',
+  'gh_doctor_consent_session_v2',
+  'doctor_portal_session_token_v1',
+  'globalhealth_doctor_token',
+  'gh_doctor_session_token',
+  'globalhealth_doctor_session',
+  'globalhealth_medauth_session',
+  // Hospital portal
+  'gh_hospital_portal_session_v1',
+  'gh_hospital_portal_session_v1_token',
+  'globalhealth_hospital_session',
+  'gh_hospital_session_token',
+  // Pharmacy portal (partner + dispensary sessions)
+  'pharmacy_partner_session_token_v1',
+  'gh_pharmacy_portal_auth_state',
+  'gh_pharmacy_partner_session_v1',
+  'globalhealth_pharmacy_session',
+  'gh_pharmacy_session_token',
+  'globalhealth_partner_session',
+  // News / editorial / verified-authority workspaces
+  'globalhealth_news_session',
+  'gh_news_session_token',
+  'gh_staff_session_v3',
+  'globalhealth_news_admin_token',
+  'globalhealth_news_authority_token',
+];
+
+/**
+ * True when any GlobalHealth session (User Portal OR a professional portal
+ * workspace) is present in storage. This is what keeps the mandatory visitor
+ * entry wall satisfied after a role-based portal sign-in.
+ */
+export function hasAnyPortalSession(): boolean {
+  try {
+    return ENTRY_SESSION_MARKER_KEYS.some((key) => {
+      const value = localStorage.getItem(key);
+      return !!value && value !== 'null' && value !== 'false';
+    });
+  } catch {
+    // Storage unavailable — treat as signed out (the wall shows).
+    return false;
   }
 }
 

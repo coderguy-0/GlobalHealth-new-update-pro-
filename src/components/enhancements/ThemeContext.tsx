@@ -57,6 +57,19 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return <ThemeContext.Provider value={{ theme, toggle, setTheme }}>{children}</ThemeContext.Provider>;
 };
 
+/**
+ * The visitor entry wall uses this to restore the visitor's saved theme
+ * preference when the sign-in screen unmounts (it forces a light screen).
+ */
+export function readStoredTheme(): Theme | null {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved === 'light' || saved === 'dark' ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
 export const useTheme = () => {
   const ctx = useContext(ThemeContext);
   if (!ctx) throw new Error('useTheme must be used within <ThemeProvider>');

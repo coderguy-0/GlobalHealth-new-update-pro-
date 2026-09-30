@@ -10,6 +10,8 @@ import { TermsPage } from './components/legal/TermsPage';
 import { PrivacyPolicyPage } from './components/legal/PrivacyPolicyPage';
 import { LanguageModal } from './components/LanguageModal';
 import { AuthGate } from './components/auth/AuthGate';
+import { VisitorLoginWall, EntrySplash } from './components/auth/VisitorLoginWall';
+import type { TargetPortalRoute } from './components/auth/RolePortalAuthPanel';
 import { ProtectedScreen, AuthLoading, SessionExpiredModal } from './components/auth/ProtectedScreen';
 import { WorkspaceOverlay } from './components/WorkspaceOverlay';
 import { PortalCredentialForm } from './components/portals/PortalCredentialForm';
@@ -17,7 +19,8 @@ import { NewsStaffSignupScreen } from './components/news/NewsWorkspaceAccessScre
 import { NewsManagementLogin } from './components/NewsManagementLogin';
 import { useLocalization } from './context/LocalizationContext';
 import { useAuth, toUserAccount } from './context/AuthContext';
-import { AuthSubView } from './types/auth';
+import { AuthSubView, PublicUserAccount } from './types/auth';
+import { hasAnyPortalSession } from './services/authClient';
 import { TERMS_VERSION } from './lib/policyVersions';
 import { newsAuthService } from './services/newsAuthService';
 import { getAdminToken, getAdminProfile } from './services/newsGovernanceClient';
@@ -259,7 +262,7 @@ const OVERLAY_META: Partial<Record<NavigationTab, { title: string; subtitle: str
 
 export default function App() {
   const { currentLanguage, direction } = useLocalization();
-  const { user: currentUser, publicUser, setPublicUser, initializing, requireAuth, gateOpen, logout, authenticate, closeGate } = useAuth();
+  const { user: currentUser, publicUser, setPublicUser, initializing, requireAuth, gateOpen, logout, authenticate, closeGate, sessionExpired } = useAuth();
   const [currentTab, setCurrentTabState] = useState<NavigationTab>('home');
   const [overlayTab, setOverlayTab] = useState<NavigationTab | null>(null);
   // Optional prompt pre-filled when a user asks AI from a context page (e.g. a disease).
@@ -817,6 +820,103 @@ export default function App() {
 
     return null;
   };
+
+  // -------------------------------------------------------------------------
+  // VISITOR ENTRY WALL — every visitor sees the sign-in page first and must
+  // authenticate with their own account before the website renders. The wall
+  // replaces the entire site chrome (navbar, footer, content) until an
+  // identity exists: a User Portal session OR a professional portal workspace
+  // session (Doctor / Hospital / Pharmacy / News). The wall is deliberately
+  // LIGHT-themed — never a dark screen. Terms & Privacy Policy stay readable
+  // before sign-in; every other destination routes back to the sign-in card.
+  // -------------------------------------------------------------------------
+
+  // Landing destination chosen when a visitor signs in from the entry wall.
+  // AuthPage routes to "dashboard" right after onLoginSuccess; this ref lets
+  // a deep link (or the plain homepage) win over that default.
+  const wallLandingRef = useRef<{ tab: NavigationTab; newsArticleId?: string | null } | null>(null);
+
+  // Navigate WITHOUT the signed-out protection check. Used right after a
+  // fresh sign-in, where the session token was issued in the same tick (the
+  // captured auth-state closure would still read as signed out).
+  const navigateDirect = (tab: NavigationTab, newsArticleId?: string | null) => {
+    if (tab === 'pharmacy-portal') {
+      const deepLink = pharmacyDeepLinkRef.current;
+      pharmacyDeepLinkRef.current = null;
+      setPharmacyPortalScreen(deepLink || 'landing');
+    }
+    if (isOverlayTab(tab)) {
+      setOverlayTab(tab);
+      writeHash(tab);
+      return;
+    }
+    if (tab !== 'news') setActiveNewsArticleId(null);
+    setOverlayTab(null);
+    setCurrentTabState(tab);
+    if (tab === 'ai-assistant') setHasOpenedAssistant(true);
+    writeHash(tab, tab === 'news' ? newsArticleId ?? activeNewsArticleId : null);
+  };
+
+  // Successful User Portal sign-in from the entry wall: establish the global
+  // session and remember where this visitor should land (deep link, else home).
+  const handleWallLoginSuccess = (serverUser: PublicUserAccount, token?: string) => {
+    authenticate(toUserAccount(serverUser), token || '', serverUser);
+    const parsed = parseHash();
+    const intended = intendedTabRef.current || parsed.tab;
+    intendedTabRef.current = null;
+    wallLandingRef.current =
+      intended && intended !== 'auth' && intended !== 'terms' && intended !== 'privacy-policy'
+        ? { tab: intended, newsArticleId: parsed.newsArticleId ?? null }
+        : { tab: 'home' };
+  };
+
+  // Role-portal routing from the wall (Doctor / Hospital / Pharmacy / News).
+  // AuthPage also calls this with 'dashboard' right after a User Portal
+  // sign-in — the stored landing wins over that default in that case.
+  const handleWallPortalNavigate = (portal: TargetPortalRoute) => {
+    if (portal === 'pharmacy-portal') pharmacyDeepLinkRef.current = 'dashboard';
+    else if (portal === 'news-management') setNewsStaffUnlocked(true);
+    if (portal === 'dashboard' && wallLandingRef.current) {
+      const landing = wallLandingRef.current;
+      wallLandingRef.current = null;
+      navigateDirect(landing.tab, landing.newsArticleId);
+      return;
+    }
+    navigateDirect(portal);
+  };
+
+  const portalSessionActive = hasAnyPortalSession();
+  const entryWallActive = !currentUser && !portalSessionActive;
+  const entryLegalPage: 'terms' | 'privacy-policy' | null =
+    entryWallActive && currentTab === 'terms'
+      ? 'terms'
+      : entryWallActive && currentTab === 'privacy-policy'
+        ? 'privacy-policy'
+        : null;
+
+  // Still verifying any stored session — show the light splash, never content.
+  if (initializing) {
+    return <EntrySplash direction={direction} />;
+  }
+
+  // No identity at all → the full-screen sign-in wall (light-themed, no skip).
+  if (entryWallActive) {
+    return (
+      <>
+        <VisitorLoginWall
+          legalPage={entryLegalPage}
+          sessionExpired={sessionExpired}
+          direction={direction}
+          onLoginSuccess={handleWallLoginSuccess}
+          onNavigateToPortal={handleWallPortalNavigate}
+          onReturnToSignIn={() => navigateDirect('home')}
+          onOpenLegalPage={(tab) => setCurrentTab(tab)}
+        />
+        {/* Emergency numbers stay reachable before sign-in — safety first. */}
+        <EmergencyModal open={emergencyModalOpen} onClose={() => setEmergencyModalOpen(false)} />
+      </>
+    );
+  }
 
   return (
     <div 

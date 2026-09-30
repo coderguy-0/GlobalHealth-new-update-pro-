@@ -7,6 +7,7 @@ import {
   Bookmark,
   Shield,
   Activity,
+  Lock,
   User,
   Stethoscope,
   Building2,
@@ -44,6 +45,14 @@ interface AuthPageProps {
   onNavigateToPortal?: (portal: TargetPortalRoute) => void;
   /** Open a full legal page (Terms / Privacy Policy). */
   onOpenLegalPage?: (tab: 'terms' | 'privacy-policy') => void;
+  /**
+   * Rendered by the mandatory visitor entry wall: every visitor must sign in
+   * before the website renders. Hides the "back to site" affordance (there is
+   * no site behind the wall yet) and shows a sign-in-required marker instead.
+   */
+  entryWall?: boolean;
+  /** Light informational banner above the card (e.g. session expired). */
+  entryNotice?: string;
 }
 
 interface AvatarState {
@@ -133,6 +142,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   onNavigateToDashboard,
   onNavigateToPortal,
   onOpenLegalPage,
+  entryWall = false,
+  entryNotice,
 }) => {
   const [selectedRole, setSelectedRole] = useState<AuthRoleKey>(() => {
     try {
@@ -259,22 +270,39 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       {/* 1. Header Navigation Bar (Focused for Authentication) */}
       <header className="relative z-30 w-full border-b border-medical-100/80 bg-white/85 backdrop-blur-md px-4 lg:px-8 py-3.5">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <button
-            onClick={onReturnToHome}
-            className="group flex cursor-pointer items-center gap-2.5 text-left focus-visible:outline-none"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-medical-500 to-medical-800 text-white shadow-md shadow-medical-600/25 transition group-hover:scale-105">
-              <Activity className="h-5 w-5" />
+          {entryWall ? (
+            /* Entry wall: brand is not a link — there is no site behind it yet. */
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-medical-500 to-medical-800 text-white shadow-md shadow-medical-600/25">
+                <Activity className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="block text-lg font-extrabold leading-tight tracking-tight text-slate-900">
+                  GlobalHealth
+                </span>
+                <span className="block text-[10px] font-semibold uppercase tracking-wide text-medical-700">
+                  Unified Role-Based Portal Gateway
+                </span>
+              </div>
             </div>
-            <div>
-              <span className="block text-lg font-extrabold leading-tight tracking-tight text-slate-900">
-                GlobalHealth
-              </span>
-              <span className="block text-[10px] font-semibold uppercase tracking-wide text-medical-700">
-                Unified Role-Based Portal Gateway
-              </span>
-            </div>
-          </button>
+          ) : (
+            <button
+              onClick={onReturnToHome}
+              className="group flex cursor-pointer items-center gap-2.5 text-left focus-visible:outline-none"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-medical-500 to-medical-800 text-white shadow-md shadow-medical-600/25 transition group-hover:scale-105">
+                <Activity className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="block text-lg font-extrabold leading-tight tracking-tight text-slate-900">
+                  GlobalHealth
+                </span>
+                <span className="block text-[10px] font-semibold uppercase tracking-wide text-medical-700">
+                  Unified Role-Based Portal Gateway
+                </span>
+              </div>
+            </button>
+          )}
 
           <div className="flex items-center gap-2 sm:gap-3">
             <button
@@ -286,17 +314,36 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               <span className="hidden sm:inline">Security & Help</span>
             </button>
 
-            <button
-              type="button"
-              onClick={onReturnToHome}
-              className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-medical-50 px-3.5 py-1.5 text-xs font-bold text-medical-800 transition hover:bg-medical-100"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              <span>Back to GlobalHealth</span>
-            </button>
+            {entryWall ? (
+              <span className="inline-flex items-center gap-1.5 rounded-xl border border-medical-200 bg-medical-50 px-3 py-1.5 text-xs font-bold text-medical-800">
+                <Lock className="h-3.5 w-3.5 text-medical-600" />
+                <span className="hidden sm:inline">Sign-in required to enter GlobalHealth</span>
+                <span className="sm:hidden">Sign in</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={onReturnToHome}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-medical-50 px-3.5 py-1.5 text-xs font-bold text-medical-800 transition hover:bg-medical-100"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span>Back to GlobalHealth</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
+
+      {/* Entry-wall notice — light banner, e.g. after a session expiry. */}
+      {entryNotice && (
+        <div
+          role="status"
+          className="relative z-20 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-center text-xs font-semibold text-amber-900"
+        >
+          <ShieldCheck className="mr-1.5 inline h-3.5 w-3.5 text-amber-700" />
+          {entryNotice}
+        </div>
+      )}
 
       {/* 2. Main Authentication Surface */}
       <main className="relative z-10 mx-auto flex w-full max-w-7xl flex-1 items-center justify-center px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
