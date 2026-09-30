@@ -331,12 +331,63 @@ async function scenarioInvalidToken() {
 }
 
 // ---------------------------------------------------------------------------
+async function scenarioFullPageHealthRecords() {
+  console.log('\n[6] My Health Records renders as a FULL PAGE of the website');
+  const dom = makeWindow(BASE + '/');
+  shimGlobals(dom);
+  localStorage.setItem('gh:theme-preference', 'light');
+  localStorage.removeItem('globalhealth_auth_token');
+  localStorage.removeItem('globalhealth_user_session');
+
+  await renderApp();
+  await waitFor(() => document.body.textContent.includes('Welcome Back'), 'wall');
+  const fillBtn = await waitFor(
+    () => [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Sarah Jenkins')),
+    'demo quick-fill'
+  );
+  fillBtn.click();
+  await sleep(150);
+  document.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await waitFor(() => document.getElementById('gh-main-content') !== null, 'site after login');
+
+  window.location.hash = '#dashboard';
+  await waitFor(() => document.body.textContent.includes('My Health Records'), 'My Health Records page');
+  await sleep(400);
+  assert(
+    document.querySelector('[role="dialog"]') === null,
+    'no overlay dialog — health records is a page, not a modal'
+  );
+  assert(document.querySelector('header') !== null, 'website navbar still visible (full page)');
+  assert(
+    document.body.textContent.includes('Personal health dashboard'),
+    'dashboard | doctor-access sub-navigation present'
+  );
+  assert(
+    document.body.textContent.includes('Clinical Health Record'),
+    'DashboardView layer switcher visible (was hidden inside the overlay)'
+  );
+
+  const doctorTab = [...document.querySelectorAll('button')].find((b) =>
+    b.textContent.includes('Doctor access')
+  );
+  assert(!!doctorTab, '"Doctor access" tab present');
+  doctorTab.click();
+  await waitFor(() => window.location.hash === '#doctor-consent', 'doctor-access navigates');
+  await sleep(200);
+  assert(
+    document.querySelector('[role="dialog"]') === null,
+    'Doctor access also renders as a page'
+  );
+}
+
+// ---------------------------------------------------------------------------
 const only = process.argv[2];
 try {
   if (only !== 'legal') await scenarioWallAndLogin();
   if (only !== 'wall') await scenarioLegalPage();
   if (!only) await scenarioDeepLink();
   if (!only) await scenarioInvalidToken();
+  if (!only) await scenarioFullPageHealthRecords();
   console.log('\nALL ENTRY-WALL SMOKE CHECKS PASSED');
   process.exit(0);
 } catch (err) {

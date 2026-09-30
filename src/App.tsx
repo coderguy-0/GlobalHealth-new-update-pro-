@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
-import { Newspaper as NewspaperIcon, UserPlus } from 'lucide-react';
+import { Newspaper as NewspaperIcon, UserPlus, Heart } from 'lucide-react';
 import { NavigationTab } from './types';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
@@ -155,10 +155,9 @@ const FULLSCREEN_OVERLAY_TABS: NavigationTab[] = [
 ];
 
 // Destinations that overlap the public website instead of replacing it.
+// NOTE: dashboard / privacy / doctor-consent are intentionally NOT here —
+// "My Health Records" renders as a full page of the user website.
 const OVERLAY_TABS: NavigationTab[] = [
-  'dashboard',
-  'privacy',
-  'doctor-consent',
   'hospital-portal',
   'doctor-portal',
   'medauth',
@@ -192,24 +191,6 @@ const PROTECTED_COPY: Partial<Record<NavigationTab, { title: string; feature: st
 };
 
 const OVERLAY_META: Partial<Record<NavigationTab, { title: string; subtitle: string; badge: string; theme: 'light' | 'dark' }>> = {
-  dashboard: {
-    title: 'My Health Records',
-    subtitle: 'Personal health dashboard and doctor access',
-    badge: 'FHIR R4 Aligned',
-    theme: 'light',
-  },
-  privacy: {
-    title: 'My Health Records',
-    subtitle: 'Doctor access, consent tokens and sharing rules',
-    badge: 'Patient Controlled',
-    theme: 'light',
-  },
-  'doctor-consent': {
-    title: 'My Health Records',
-    subtitle: 'Doctor access, consent tokens and sharing rules',
-    badge: 'Patient Controlled',
-    theme: 'light',
-  },
   medauth: {
     title: 'Doctor Portal',
     subtitle: 'State Board Registry & Private Doctor Portal — MedAuth Engine™',
@@ -634,32 +615,30 @@ export default function App() {
 
   const overlayMeta = overlayTab ? OVERLAY_META[overlayTab] : undefined;
 
-  // Health-records destinations share one overlay header with a two-tab
-  // sub-navigation: Personal health dashboard | Doctor access.
-  const isHealthRecordsOverlay =
-    overlayTab === 'dashboard' || overlayTab === 'privacy' || overlayTab === 'doctor-consent';
+  // Health-records destinations render as ONE full page of the user website
+  // with a two-tab sub-navigation: Personal health dashboard | Doctor access.
+  const isHealthRecordsPage =
+    currentTab === 'dashboard' || currentTab === 'privacy' || currentTab === 'doctor-consent';
 
   const openHealthRecords = (tab: 'dashboard' | 'doctor-access') => {
     if (tab === 'dashboard') {
       setDashboardViewMode('dashboard');
-      setOverlayTab('dashboard');
-      writeHash('dashboard');
+      setCurrentTab('dashboard');
     } else {
-      setOverlayTab('doctor-consent');
-      writeHash('doctor-consent');
+      setCurrentTab('doctor-consent');
     }
   };
 
-  const healthSubnav = isHealthRecordsOverlay ? (
+  const healthSubnav = isHealthRecordsPage ? (
     <div className="border-t border-slate-200 bg-white">
       <div className="mx-auto flex max-w-7xl items-center gap-1.5 px-4 py-1.5 sm:px-6" role="tablist" aria-label="Health records sections">
         <button
           type="button"
           role="tab"
-          aria-selected={overlayTab === 'dashboard'}
+          aria-selected={currentTab === 'dashboard'}
           onClick={() => openHealthRecords('dashboard')}
           className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition cursor-pointer ${
-            overlayTab === 'dashboard'
+            currentTab === 'dashboard'
               ? 'bg-teal-700 text-white shadow-sm'
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
           }`}
@@ -669,10 +648,10 @@ export default function App() {
         <button
           type="button"
           role="tab"
-          aria-selected={overlayTab === 'privacy' || overlayTab === 'doctor-consent'}
+          aria-selected={currentTab === 'privacy' || currentTab === 'doctor-consent'}
           onClick={() => openHealthRecords('doctor-access')}
           className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition cursor-pointer ${
-            overlayTab === 'privacy' || overlayTab === 'doctor-consent'
+            currentTab === 'privacy' || currentTab === 'doctor-consent'
               ? 'bg-teal-700 text-white shadow-sm'
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
           }`}
@@ -680,6 +659,36 @@ export default function App() {
           Doctor access
         </button>
       </div>
+    </div>
+  ) : null;
+
+  // Full-page header for My Health Records (title, badge & sub-navigation) —
+  // the identity the framed overlay used to provide, now part of the page.
+  const healthRecordsHeader = isHealthRecordsPage ? (
+    <div className="border-b border-slate-200 bg-white">
+      <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-3 pb-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-sm">
+            <Heart className="h-5 w-5 fill-white/20" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <h1 className="text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">
+                My Health Records
+              </h1>
+              <span className="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-teal-800">
+                {currentTab === 'dashboard' ? 'FHIR R4 Aligned' : 'Patient Controlled'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500">
+              {currentTab === 'dashboard'
+                ? 'Personal health dashboard and doctor access'
+                : 'Doctor access, consent tokens and sharing rules'}
+            </p>
+          </div>
+        </div>
+      </div>
+      {healthSubnav}
     </div>
   ) : null;
 
@@ -733,52 +742,6 @@ export default function App() {
     if (!overlayTab) return null;
 
     if (showSecureLoading) return <AuthLoading />;
-
-    if (overlayTab === 'dashboard' && !currentUser) {
-      return (
-        <ProtectedScreen
-          title={PROTECTED_COPY['dashboard']?.title}
-          feature={PROTECTED_COPY['dashboard']?.feature}
-        />
-      );
-    }
-
-    if (overlayTab === 'dashboard' && currentUser) {
-      if (dashboardViewMode === 'details') {
-        return (
-          <PersonalDetailsView
-            currentUser={currentUser}
-            onUpdateUser={persistUserPatch}
-          />
-        );
-      }
-      return (
-        <DashboardView
-          savedIds={savedIds}
-          onToggleSave={handleToggleSave}
-          currentUser={currentUser}
-          initialViewMode={dashboardViewMode === 'ehr' || dashboardViewMode === 'saved' ? dashboardViewMode : 'dashboard'}
-          onUpdateUser={persistUserPatch}
-          hideModeSwitcher
-        />
-      );
-    }
-
-    if (overlayTab === 'doctor-consent') {
-      return <DoctorAccessConsentPage onTabChange={setCurrentTab} />;
-    }
-
-    if (overlayTab === 'privacy' && !currentUser) {
-      return (
-        <ProtectedScreen
-          title={PROTECTED_COPY['privacy']?.title}
-          feature={PROTECTED_COPY['privacy']?.feature}
-        />
-      );
-    }
-    if (overlayTab === 'privacy' && currentUser) {
-      return <PrivacyConsentView />;
-    }
 
     if (overlayTab === 'doctor-console') {
       return <DoctorConsentConsole onExit={closeOverlay} />;
@@ -1186,6 +1149,46 @@ export default function App() {
           />
         )}
 
+        {/* Full-page My Health Records — the dashboard, clinical EHR and saved
+            library render as a real page of the user website (navbar + footer),
+            not as an overlay card. The same page hosts Doctor access. */}
+        {(currentTab === 'dashboard' || currentTab === 'privacy') && !currentUser && (
+          <ProtectedScreen
+            title={PROTECTED_COPY[currentTab]?.title}
+            feature={PROTECTED_COPY[currentTab]?.feature}
+          />
+        )}
+        {currentTab === 'dashboard' && currentUser && (
+          <div className="bg-slate-50">
+            {healthRecordsHeader}
+            {dashboardViewMode === 'details' ? (
+              <PersonalDetailsView currentUser={currentUser} onUpdateUser={persistUserPatch} />
+            ) : (
+              <DashboardView
+                savedIds={savedIds}
+                onToggleSave={handleToggleSave}
+                currentUser={currentUser}
+                initialViewMode={
+                  dashboardViewMode === 'ehr' || dashboardViewMode === 'saved' ? dashboardViewMode : 'dashboard'
+                }
+                onUpdateUser={persistUserPatch}
+              />
+            )}
+          </div>
+        )}
+        {currentTab === 'privacy' && currentUser && (
+          <div className="bg-slate-50">
+            {healthRecordsHeader}
+            <PrivacyConsentView />
+          </div>
+        )}
+        {currentTab === 'doctor-consent' && (
+          <div className="bg-slate-50">
+            {healthRecordsHeader}
+            <DoctorAccessConsentPage onTabChange={setCurrentTab} />
+          </div>
+        )}
+
         {/* Protected: Health & Security History (patient-only, append-only) */}
         {currentTab === 'my-history' && !currentUser && (
           <ProtectedScreen
@@ -1247,7 +1250,6 @@ export default function App() {
           theme={overlayMeta.theme}
           layout={FULLSCREEN_OVERLAY_TABS.includes(overlayTab) ? 'fullscreen' : 'framed'}
           onClose={closeOverlay}
-          headerExtra={healthSubnav}
         >
           <Suspense fallback={<RouteFallback />}>{renderOverlayBody()}</Suspense>
         </WorkspaceOverlay>
